@@ -1,0 +1,24 @@
+{
+  "name": "cumpair",
+  "version": "1.0.0",
+  "description": "Price comparison application for local and hypermarkets",
+  "main": "index.js",
+  "scripts": {
+    "start": "echo \"Please run backend and frontend separately. Use 'cd backend && npm run dev' and 'cd frontend && npm start' in different terminals.\"",
+    "server": "cd backend && npm run dev",
+    "client": "cd frontend && npm start",
+    "install-all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "price-comparison",
+    "web-scraping",
+    "groq",
+    "hackhazards"
+  ],
+  "author": "Team Cumpair",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
