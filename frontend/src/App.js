@@ -1,23 +1,57 @@
-import React, { useState } from 'react';
-import { MagnifyingGlassIcon, QrCodeIcon } from '@heroicons/react/24/outline';
-import BarcodeScanner from './components/BarcodeScanner';
+import React, { useState, useEffect } from 'react';
+import { Routes, Route } from 'react-router-dom';
+import CyberLayout from './components/CyberLayout';
+import InputModule from './components/InputModule';
+import AnimatedGrid from './components/AnimatedGrid';
+import ProductDetailsPage from './components/product/ProductDetailsPage';
+import GlitchHeader from './components/GlitchHeader';
 import './App.css';
 
 function App() {
-  const [productName, setProductName] = useState('');
-  const [category, setCategory] = useState('');
-  const [expectedPrice, setExpectedPrice] = useState('');
-  const [specifications, setSpecifications] = useState('');
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [showScanner, setShowScanner] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
+  
+  // Add scroll animation effect
+  useEffect(() => {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('active');
+        }
+      });
+    }, { threshold: 0.1 });
+    
+    document.querySelectorAll('.fade-in-on-scroll, .slide-in-left, .slide-in-right, .scale-in').forEach(el => {
+      observer.observe(el);
+    });
+    
+    return () => observer.disconnect();
+  }, [results]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  // Handle search submission (text or image)
+  const handleSearch = async (query, imageFile) => {
     setLoading(true);
     setError(null);
     
+    try {
+      if (imageFile) {
+        await handleImageUpload(imageFile);
+      } else {
+        await handleTextSearch(query);
+      }
+      setHasSearched(true);
+    } catch (error) {
+      console.error('Search error:', error);
+      setError(error instanceof Error ? error.message : 'An unexpected error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle text search submission
+  const handleTextSearch = async (query) => {
     try {
       const response = await fetch('http://localhost:5000/api/price-comparison/search', {
         method: 'POST',
@@ -25,10 +59,7 @@ function App() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          productName,
-          category,
-          specifications,
-          expectedPrice
+          productName: query,
         }),
       });
 
@@ -38,332 +69,283 @@ function App() {
         throw new Error(data.message || 'Failed to fetch price comparison data');
       }
 
-      setResults(data);
+      // Transform API results to ProductData format
+      const formattedResults = transformApiResults(data, query);
+      setResults(formattedResults);
     } catch (error) {
       console.error('Error fetching price comparison:', error);
-      setError(error.message || 'An unexpected error occurred');
       
-      setResults({
-        productDetails: {
-          name: productName,
-          category,
-          specifications
-        },
-        results: [
-          {
-            marketplace: 'Amazon',
-            price: '₹' + (Math.random() * 10000 + 5000).toFixed(2),
-            originalPrice: '₹' + (Math.random() * 15000 + 8000).toFixed(2),
-            discount: Math.floor(Math.random() * 30 + 5) + '%',
-            rating: (Math.random() * 5).toFixed(1),
-            inStock: true,
-            shipping: 'Free with Prime',
-            url: `https://amazon.in/s?k=${encodeURIComponent(productName)}`
-          },
-          {
-            marketplace: 'Flipkart',
-            price: '₹' + (Math.random() * 9000 + 4800).toFixed(2),
-            originalPrice: '₹' + (Math.random() * 14000 + 7000).toFixed(2),
-            discount: Math.floor(Math.random() * 25 + 3) + '%',
-            rating: (Math.random() * 5).toFixed(1),
-            inStock: true,
-            shipping: '₹40',
-            url: `https://flipkart.com/search?q=${encodeURIComponent(productName)}`
-          },
-          {
-            marketplace: 'DMart',
-            price: '₹' + (Math.random() * 8500 + 4500).toFixed(2),
-            originalPrice: '₹' + (Math.random() * 13000 + 6000).toFixed(2),
-            discount: Math.floor(Math.random() * 20 + 5) + '%',
-            rating: (Math.random() * 5).toFixed(1),
-            inStock: Math.random() > 0.3,
-            shipping: 'Store pickup only',
-            url: '#'
-          },
-          {
-            marketplace: 'Reliance Mart',
-            price: '₹' + (Math.random() * 9500 + 5200).toFixed(2),
-            originalPrice: '₹' + (Math.random() * 14500 + 7500).toFixed(2),
-            discount: Math.floor(Math.random() * 18 + 8) + '%',
-            rating: (Math.random() * 5).toFixed(1),
-            inStock: Math.random() > 0.2,
-            shipping: 'Free Delivery',
-            url: '#'
-          }
-        ]
-      });
-    } finally {
-      setLoading(false);
+      // Fallback mock data for development/demo
+      const mockResults = generateMockResults(query);
+      setResults(mockResults);
+      throw error;
     }
   };
 
-  const handleBarcodeSearch = () => {
-    setShowScanner(true);
-  };
-
-  const handleBarcodeDetected = async (barcode) => {
-    setShowScanner(false);
-    setLoading(true);
-    setError(null);
+  // Handle image upload for visual search
+  const handleImageUpload = async (file) => {
+    const formData = new FormData();
+    formData.append('image', file);
     
     try {
-      const response = await fetch('http://localhost:5000/api/price-comparison/barcode', {
+      const response = await fetch('http://localhost:5000/api/price-comparison/image', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ barcode }),
+        body: formData,
       });
 
       const data = await response.json();
       
       if (!data.success) {
-        throw new Error(data.message || 'Failed to fetch product details from barcode');
+        throw new Error(data.message || 'Failed to process image');
       }
 
-      setProductName(data.productDetails.name);
-      if (data.productDetails.category) {
-        setCategory(data.productDetails.category);
-      }
-      if (data.productDetails.specifications) {
-        setSpecifications(data.productDetails.specifications);
-      }
-      
-      setResults(data);
+      // Transform API results to ProductData format
+      const formattedResults = transformApiResults(data, 'Image Search');
+      setResults(formattedResults);
     } catch (error) {
-      console.error('Error processing barcode:', error);
-      setError(error.message || 'An unexpected error occurred while processing the barcode');
+      console.error('Error processing image:', error);
       
-      setProductName(`Product (Barcode: ${barcode})`);
-    } finally {
-      setLoading(false);
+      // Fallback mock data
+      const mockResults = generateMockResults('Image Search');
+      setResults(mockResults);
+      throw error;
     }
   };
 
+  // Transform API results to ProductData format
+  const transformApiResults = (data, query) => {
+    if (!data.results || !Array.isArray(data.results)) {
+      return [];
+    }
+    
+    // Find the lowest price to mark it
+    const prices = data.results.map((r) => 
+      typeof r.price === 'string' ? parseFloat(r.price.replace(/[^\d.]/g, '')) : (r.price || 0)
+    );
+    const lowestPriceIndex = prices.indexOf(Math.min(...prices));
+    
+    return data.results.map((result, index) => {
+      const price = typeof result.price === 'string' 
+        ? result.price 
+        : `₹${result.price?.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+      
+      const originalPrice = result.originalPrice 
+        ? (typeof result.originalPrice === 'string' 
+          ? result.originalPrice 
+          : `₹${result.originalPrice?.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`)
+        : undefined;
+      
+      return {
+        id: result.id || `id-${Math.random().toString(36).substr(2, 9)}`,
+        name: result.name || data.productDetails?.name || query,
+        price,
+        originalPrice,
+        discount: result.discount,
+        vendor: result.retailer || result.marketplace || 'Unknown Retailer',
+        vendorLogo: result.vendorLogo || `https://via.placeholder.com/32x32?text=${encodeURIComponent(result.retailer?.[0] || 'R')}`,
+        rating: result.rating,
+        inStock: result.inStock !== undefined ? result.inStock : true,
+        isLowestPrice: index === lowestPriceIndex,
+        isBestDeal: index === 0, // First result usually has best overall value
+        imageUrl: result.imageUrl || `https://via.placeholder.com/300x300?text=${encodeURIComponent(result.retailer || 'Product')}`,
+        url: result.url || `#${result.id || index}`
+      };
+    });
+  };
+
+  // Generate mock results for development/demo
+  const generateMockResults = (query) => {
+    const retailers = [
+      { name: 'Amazon', logo: 'https://upload.wikimedia.org/wikipedia/commons/4/4a/Amazon_icon.svg' },
+      { name: 'Flipkart', logo: 'https://static-assets-web.flixcart.com/fk-p-linchpin-web/fk-cp-zion/img/flipkart-plus_8d85f4.png' },
+      { name: 'DMart', logo: 'https://d-mart.net/wp-content/uploads/2015/11/dm-icon.jpg' },
+      { name: 'Reliance Digital', logo: 'https://i.pinimg.com/originals/43/00/9b/43009b67a83dca016c3a5b5c74b9f0e9.jpg' }
+    ];
+    const basePrice = Math.random() * 10000 + 5000;
+    
+    return retailers.map((retailer, index) => {
+      // Create some price variance between retailers
+      const variance = (Math.random() * 0.2) - 0.1; // -10% to +10%
+      const price = basePrice * (1 + variance);
+      const originalPrice = price * (1 + (Math.random() * 0.3 + 0.05)); // 5-35% higher
+      const showDiscount = Math.random() > 0.3;
+      const discount = showDiscount ? `${Math.round((1 - (price / originalPrice)) * 100)}% OFF` : undefined;
+
+      return {
+        id: `${index}-${Date.now()}`,
+        name: `${query} - Premium Model ${index + 1}`,
+        price: `₹${price.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`,
+        originalPrice: showDiscount ? `₹${originalPrice.toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : undefined,
+        discount,
+        vendor: retailer.name,
+        vendorLogo: retailer.logo,
+        rating: (Math.random() * 2 + 3).toFixed(1), // 3-5 stars
+        inStock: Math.random() > 0.2,
+        isLowestPrice: index === 1, // 2nd result has lowest price
+        isBestDeal: index === 0, // 1st result has best deal
+        imageUrl: `https://via.placeholder.com/300x300?text=${encodeURIComponent(retailer.name)}`,
+        url: `https://example.com/${retailer.name.toLowerCase()}/${encodeURIComponent(query)}`
+      };
+    });
+  };
+
   return (
-    <div className="min-h-screen bg-dark-bg text-white">
-      <header className="px-6 py-4 border-b border-gray-800">
-        <div className="container mx-auto flex justify-between items-center">
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-neon-blue to-neon-teal bg-clip-text text-transparent">
-            Cumpair
-          </h1>
-          <nav className="flex space-x-4">
-            <a href="#" className="hover:text-neon-blue transition-colors">Home</a>
-            <a href="#" className="hover:text-neon-blue transition-colors">About</a>
-            <a href="#" className="hover:text-neon-blue transition-colors">Contact</a>
-          </nav>
-        </div>
-      </header>
-
-      <main className="container mx-auto px-4 py-8">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-bold mb-4">
-            <span className="bg-gradient-to-r from-neon-blue via-neon-teal to-neon-green bg-clip-text text-transparent">
-              Compare Prices
-            </span> 
-            <span> Across Retailers</span>
-          </h1>
-          <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-            Enter a product name or scan a barcode to instantly compare prices across
-            local stores and major hypermarkets like DMart, Reliance Mart, Amazon, and Flipkart.
-          </p>
-        </div>
-
-        <div className="max-w-3xl mx-auto mb-16 bg-dark-surface p-6 rounded-xl shadow-lg border border-gray-800">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="flex flex-col md:flex-row md:space-x-4 space-y-4 md:space-y-0">
-              <div className="flex-1">
-                <label htmlFor="productName" className="block text-sm font-medium text-gray-400 mb-1">
-                  Product Name
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    id="productName"
-                    value={productName}
-                    onChange={(e) => setProductName(e.target.value)}
-                    placeholder="e.g., iPhone 14 Pro, Samsung TV, etc."
-                    className="w-full bg-gray-900 border border-gray-700 rounded-lg py-2 px-4 text-white focus:outline-none focus:ring-2 focus:ring-neon-blue focus:border-transparent"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={handleBarcodeSearch}
-                    className="absolute right-3 top-2 text-gray-400 hover:text-neon-green"
-                    title="Scan Barcode"
-                  >
-                    <QrCodeIcon className="h-6 w-6" />
-                  </button>
+    <Routes>
+      <Route path="/" element={
+        <div className="min-h-screen w-full bg-cyber-background relative">
+          {/* Background Image Elements */}
+          <div className="bg-image-corner-1"></div>
+          <div className="bg-image-corner-2"></div>
+          
+          <div className="container mx-auto px-4 py-8 md:py-12">
+            {/* Header */}
+            <GlitchHeader 
+              title="CUMPAIR" 
+              subtitle="AI-powered price comparison across multiple retailers" 
+            />
+            
+            {/* Hero Section */}
+            <div className="max-w-4xl mx-auto mb-16 text-center fade-in-on-scroll">
+              <h2 className="text-2xl md:text-3xl font-bold mb-6 text-white">
+                Find the best deals with AI-powered price comparison
+              </h2>
+              <p className="text-gray-400 mb-8 max-w-2xl mx-auto transition-all duration-300 hover:text-gray-300">
+                Cumpair uses advanced AI to compare prices across multiple retailers, helping you save money on your purchases. Search by text or upload an image of the product you're looking for.
+              </p>
+              
+              {/* Input Section */}
+              <InputModule onSearch={handleSearch} />
+            </div>
+            
+            {/* Features Section */}
+            {!hasSearched && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
+                <div className="glass-card p-6 flex flex-col items-center text-center slide-in-left">
+                  <div className="w-12 h-12 rounded-full bg-cyber-blue/20 flex items-center justify-center mb-4 transform transition-all duration-300 hover:scale-110 hover:bg-cyber-blue/30">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-cyber-blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="11" cy="11" r="8"></circle>
+                      <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-semibold mb-2 text-white">Multimodal Search</h3>
+                  <p className="text-gray-400 transition-all duration-300 hover:text-gray-300">Search for products using text or image uploads for precise results.</p>
+                </div>
+                
+                <div className="glass-card p-6 flex flex-col items-center text-center fade-in-on-scroll" style={{ transitionDelay: "150ms" }}>
+                  <div className="w-12 h-12 rounded-full bg-cyber-purple/20 flex items-center justify-center mb-4 transform transition-all duration-300 hover:scale-110 hover:bg-cyber-purple/30">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-cyber-purple" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                      <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-semibold mb-2 text-white">Real-time Comparison</h3>
+                  <p className="text-gray-400 transition-all duration-300 hover:text-gray-300">Get the latest prices from multiple retailers in one place.</p>
+                </div>
+                
+                <div className="glass-card p-6 flex flex-col items-center text-center slide-in-right" style={{ transitionDelay: "300ms" }}>
+                  <div className="w-12 h-12 rounded-full bg-cyber-green/20 flex items-center justify-center mb-4 transform transition-all duration-300 hover:scale-110 hover:bg-cyber-green/30">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-cyber-green" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-semibold mb-2 text-white">AI-Powered Insights</h3>
+                  <p className="text-gray-400 transition-all duration-300 hover:text-gray-300">Get smart recommendations and find the absolute best deals.</p>
                 </div>
               </div>
-              <div className="w-full md:w-1/3">
-                <label htmlFor="category" className="block text-sm font-medium text-gray-400 mb-1">
-                  Category
-                </label>
-                <select
-                  id="category"
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="w-full bg-gray-900 border border-gray-700 rounded-lg py-2 px-4 text-white focus:outline-none focus:ring-2 focus:ring-neon-blue focus:border-transparent"
-                >
-                  <option value="">Select a category</option>
-                  <option value="Electronics">Electronics</option>
-                  <option value="Appliances">Appliances</option>
-                  <option value="Fashion">Fashion</option>
-                  <option value="Groceries">Groceries</option>
-                  <option value="Home & Kitchen">Home & Kitchen</option>
-                  <option value="Beauty">Beauty</option>
-                  <option value="Toys">Toys</option>
-                  <option value="Sports">Sports</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="flex flex-col md:flex-row md:space-x-4 space-y-4 md:space-y-0">
-              <div className="flex-1">
-                <label htmlFor="specifications" className="block text-sm font-medium text-gray-400 mb-1">
-                  Specifications (Optional)
-                </label>
-                <input
-                  type="text"
-                  id="specifications"
-                  value={specifications}
-                  onChange={(e) => setSpecifications(e.target.value)}
-                  placeholder="e.g., 128GB, Blue, 4K, etc."
-                  className="w-full bg-gray-900 border border-gray-700 rounded-lg py-2 px-4 text-white focus:outline-none focus:ring-2 focus:ring-neon-blue focus:border-transparent"
-                />
-              </div>
-              <div className="w-full md:w-1/3">
-                <label htmlFor="expectedPrice" className="block text-sm font-medium text-gray-400 mb-1">
-                  Expected Price (₹) (Optional)
-                </label>
-                <input
-                  type="number"
-                  id="expectedPrice"
-                  value={expectedPrice}
-                  onChange={(e) => setExpectedPrice(e.target.value)}
-                  placeholder="e.g., 50000"
-                  className="w-full bg-gray-900 border border-gray-700 rounded-lg py-2 px-4 text-white focus:outline-none focus:ring-2 focus:ring-neon-blue focus:border-transparent"
-                />
-              </div>
-            </div>
-
-            <div className="text-center">
-              <button
-                type="submit"
-                disabled={loading}
-                className="inline-flex items-center px-8 py-3 rounded-lg bg-gradient-to-r from-neon-blue to-neon-teal text-black font-medium shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-neon-green focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-black" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Comparing Prices...
-                  </>
-                ) : (
-                  <>
-                    <MagnifyingGlassIcon className="h-5 w-5 mr-2" />
-                    Compare Prices
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
-        </div>
-
-        {error && (
-          <div className="max-w-3xl mx-auto mb-8 bg-red-900/30 border border-red-700 text-red-100 p-4 rounded-lg">
-            <p>{error}</p>
-          </div>
-        )}
-
-        {results && (
-          <div className="max-w-4xl mx-auto">
-            <h2 className="text-2xl font-bold mb-6 text-center">
-              Price Comparison for <span className="text-neon-green">{results.productDetails.name}</span>
-            </h2>
+            )}
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              {results.results.map((result, index) => (
-                <div key={index} className="bg-dark-surface border border-gray-800 rounded-xl overflow-hidden hover:shadow-lg hover:shadow-neon-blue/10 transition-all duration-300 relative">
-                  {index === 0 && (
-                    <div className="absolute top-0 right-0 bg-neon-green text-black text-xs font-bold px-3 py-1 rounded-bl-lg">
-                      BEST DEAL
+            {/* Results Section */}
+            {hasSearched && (
+              <div className="mt-8 fade-in-on-scroll">
+                <h2 className="text-2xl font-bold mb-6 text-white text-center">
+                  <span className="bg-clip-text text-transparent bg-gradient-to-r from-cyber-blue to-cyber-purple">
+                    Price Comparison Results
+                  </span>
+                </h2>
+                <AnimatedGrid products={results || []} isLoading={loading} />
+              </div>
+            )}
+            
+            {/* How It Works Section */}
+            {!hasSearched && (
+              <div className="mb-16">
+                <h2 className="text-2xl font-bold mb-8 text-white text-center fade-in-on-scroll">
+                  <span className="bg-clip-text text-transparent bg-gradient-to-r from-cyber-blue to-cyber-purple">
+                    How It Works
+                  </span>
+                </h2>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="flex flex-col items-center text-center p-4 scale-in" style={{ transitionDelay: "150ms" }}>
+                    <div className="w-10 h-10 rounded-full bg-cyber-background border border-cyber-blue flex items-center justify-center mb-4 transition-all duration-300 hover:scale-110 hover:bg-cyber-blue/10">
+                      <span className="text-cyber-blue font-bold">1</span>
                     </div>
-                  )}
+                    <h3 className="text-lg font-semibold mb-2 text-white">Search Your Product</h3>
+                    <p className="text-gray-400 transition-all duration-300 hover:text-gray-300">Enter a product name or upload an image.</p>
+                  </div>
                   
-                  <div className="p-5">
-                    <div className="text-xl font-bold mb-2">{result.marketplace}</div>
-                    
-                    <div className="mb-4">
-                      <div className="text-2xl font-bold text-neon-teal">{result.price}</div>
-                      {result.originalPrice && (
-                        <div className="flex items-center space-x-2">
-                          <span className="text-gray-500 line-through text-sm">{result.originalPrice}</span>
-                          <span className="text-neon-green text-sm">{result.discount} off</span>
-                        </div>
-                      )}
+                  <div className="flex flex-col items-center text-center p-4 scale-in" style={{ transitionDelay: "300ms" }}>
+                    <div className="w-10 h-10 rounded-full bg-cyber-background border border-cyber-purple flex items-center justify-center mb-4 transition-all duration-300 hover:scale-110 hover:bg-cyber-purple/10">
+                      <span className="text-cyber-purple font-bold">2</span>
                     </div>
-                    
-                    <div className="space-y-2 text-sm text-gray-400">
-                      <div className="flex justify-between">
-                        <span>Rating:</span>
-                        <span className="text-yellow-500">{result.rating} ★</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Availability:</span>
-                        <span className={result.inStock ? 'text-green-500' : 'text-red-500'}>
-                          {result.inStock ? 'In Stock' : 'Out of Stock'}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Shipping:</span>
-                        <span>{result.shipping}</span>
-                      </div>
+                    <h3 className="text-lg font-semibold mb-2 text-white">AI Finds Best Matches</h3>
+                    <p className="text-gray-400 transition-all duration-300 hover:text-gray-300">Our AI analyzes your query and searches across multiple retailers.</p>
+                  </div>
+                  
+                  <div className="flex flex-col items-center text-center p-4 scale-in" style={{ transitionDelay: "450ms" }}>
+                    <div className="w-10 h-10 rounded-full bg-cyber-background border border-cyber-green flex items-center justify-center mb-4 transition-all duration-300 hover:scale-110 hover:bg-cyber-green/10">
+                      <span className="text-cyber-green font-bold">3</span>
                     </div>
-                    
-                    <div className="mt-4">
-                      <a 
-                        href={result.url} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="block w-full text-center py-2 border border-neon-blue text-neon-blue rounded-lg hover:bg-neon-blue hover:text-black transition-colors duration-200"
-                      >
-                        View Deal
-                      </a>
-                    </div>
+                    <h3 className="text-lg font-semibold mb-2 text-white">Compare & Save</h3>
+                    <p className="text-gray-400 transition-all duration-300 hover:text-gray-300">View all options in one place and choose the best deal for you.</p>
                   </div>
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
             
-            <div className="bg-gradient-to-r from-gray-900 to-gray-800 border border-gray-800 rounded-xl p-6 mb-8">
-              <h3 className="text-xl font-bold mb-3 text-neon-blue">AI-Powered Recommendation</h3>
-              <p className="text-gray-300">
-                Based on the current price comparison, we recommend purchasing from <strong>{results.results[0].marketplace}</strong>. 
-                This retailer offers the best value considering price, shipping options, and availability.
+            {/* Powered By Section */}
+            {!hasSearched && (
+              <div className="glass-card p-6 mb-16 text-center fade-in-on-scroll">
+                <h3 className="text-xl font-semibold mb-2 text-white flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 mr-2 text-cyber-blue transform transition-all duration-300 hover:scale-110 hover:rotate-12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                  </svg>
+                  Powered by Groq API
+                </h3>
+                <p className="text-gray-400 max-w-2xl mx-auto transition-all duration-300 hover:text-gray-300">
+                  CUMPAIR leverages Groq's powerful API for lightning-fast AI responses, providing you with accurate and intelligent price comparisons in seconds.
+                </p>
+              </div>
+            )}
+            
+            {/* Footer */}
+            <footer className="mt-20 text-center text-gray-400 text-sm fade-in-on-scroll">
+              <div className="h-px w-full max-w-md mx-auto bg-gradient-to-r from-transparent via-cyber-blue/30 to-transparent mb-6"></div>
+              <div className="flex items-center justify-center space-x-4">
+                <a 
+                  href="https://github.com" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="hover:text-cyber-blue transition-colors flex items-center transform transition-all duration-300 hover:scale-105"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+                  </svg>
+                  GitHub
+                </a>
+                <span>|</span>
+                <span>© 2025 Cumpair</span>
+              </div>
+              <p className="mt-2">
+                <span className="text-cyber-blue">Powered by</span> Groq API
               </p>
-            </div>
+            </footer>
           </div>
-        )}
-      </main>
-
-      <footer className="bg-dark-surface border-t border-gray-800 py-6">
-        <div className="container mx-auto px-4 text-center text-gray-500 text-sm">
-          <p>© 2025 Cumpair | A HackHazards Project</p>
-          <p className="mt-2">Powered by Groq AI</p>
         </div>
-      </footer>
-
-      {showScanner && (
-        <BarcodeScanner 
-          onDetected={handleBarcodeDetected} 
-          onClose={() => setShowScanner(false)} 
-        />
-      )}
-    </div>
+      } />
+      
+      <Route path="/product/:id" element={<ProductDetailsPage />} />
+    </Routes>
   );
 }
 

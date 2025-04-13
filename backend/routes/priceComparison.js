@@ -1,164 +1,219 @@
 const express = require('express');
 const router = express.Router();
-const puppeteer = require('puppeteer');
 const scraperService = require('../scraper/scraperService');
 const groqService = require('../services/groqService');
 
-// @route   POST api/price-comparison/search
-// @desc    Search for product prices across different marketplaces
-// @access  Public
+/**
+ * @route   POST api/price-comparison/search
+ * @desc    Search for a product across multiple retailers
+ * @access  Public
+ */
 router.post('/search', async (req, res) => {
   try {
-    const { productName, category, specifications, expectedPrice } = req.body;
-
+    const { productName, category, expectedPrice, specifications } = req.body;
+    
     if (!productName) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Product name is required' 
+      return res.status(400).json({
+        success: false,
+        message: 'Product name is required'
       });
     }
-
-    // Use the scraperService to fetch prices from different marketplaces
-    const scrapedResults = await scraperService.searchProduct(productName);
-
-    // Use Groq API to analyze the price comparison results
-    let aiAnalysis = null;
-    try {
-      if (groqService.isConfigured()) {
-        const analysisResult = await groqService.analyzePriceComparison(scrapedResults);
-        aiAnalysis = analysisResult.analysis;
-      }
-    } catch (groqError) {
-      console.error('Error using Groq API for price analysis:', groqError);
-      // Continue without AI analysis if there's an error
+    
+    // Get price comparison results from scraper service
+    const results = await scraperService.searchProduct(productName);
+    
+    // Format specifications for AI analysis if provided
+    let userPreferences = '';
+    if (category) userPreferences += `Category: ${category}. `;
+    if (expectedPrice) userPreferences += `Expected price range: ₹${expectedPrice}. `;
+    if (specifications) userPreferences += `Desired specifications: ${specifications}. `;
+    
+    // Use Groq AI to analyze the price comparison results
+    const aiAnalysis = await groqService.analyzePriceComparison(results);
+    
+    // Get AI-enhanced recommendations if user provided preferences
+    let recommendations = null;
+    if (userPreferences) {
+      recommendations = await groqService.getPersonalizedRecommendations(
+        productName,
+        userPreferences,
+        expectedPrice,
+        results
+      );
     }
+    
+    // Get technical specifications explanation if available
+    let specExplanation = null;
+    if (results.length > 0 && results[0].specifications) {
+      specExplanation = await groqService.explainFeatures(results[0].specifications);
+    }
+    
+    return res.json({
+      success: true,
+      results,
+      aiAnalysis: aiAnalysis.analysis,
+      recommendations: recommendations ? recommendations.recommendations : null,
+      specExplanation: specExplanation ? specExplanation.simplifiedExplanation : null
+    });
+  } catch (error) {
+    console.error('Error searching product:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error searching product',
+      error: error.message
+    });
+  }
+});
 
+/**
+ * @route   POST api/price-comparison/barcode
+ * @desc    Search for a product using barcode data
+ * @access  Public
+ */
+router.post('/barcode', async (req, res) => {
+  try {
+    const { barcode } = req.body;
+    
+    if (!barcode) {
+      return res.status(400).json({
+        success: false,
+        message: 'Barcode data is required'
+      });
+    }
+    
+    // Process barcode data to identify the product
+    const productInfo = await groqService.processBarcodeData(barcode);
+    
+    // Extract product name and details from AI response
+    const productIdentification = productInfo.productIdentification;
+    
+    // Try to parse the AI response to get structured data
+    let productName = 'Unknown Product';
+    let productCategory = '';
+    let productSpecs = '';
+    
+    try {
+      // This assumes the AI formats its response in a somewhat consistent way
+      const nameMatch = productIdentification.match(/product name:?\s*([^\n.]+)/i);
+      if (nameMatch && nameMatch[1]) {
+        productName = nameMatch[1].trim();
+      }
+      
+      const categoryMatch = productIdentification.match(/category:?\s*([^\n.]+)/i);
+      if (categoryMatch && categoryMatch[1]) {
+        productCategory = categoryMatch[1].trim();
+      }
+      
+      const specsMatch = productIdentification.match(/specifications:?\s*([^\n.]+)/i);
+      if (specsMatch && specsMatch[1]) {
+        productSpecs = specsMatch[1].trim();
+      }
+    } catch (parseError) {
+      console.error('Error parsing AI response:', parseError);
+    }
+    
+    // Now use the extracted product name to search for prices
+    const results = await scraperService.searchProduct(productName);
+    
+    // Use AI to generate a product review/description
+    const firstProduct = results.length > 0 ? results[0] : { title: productName };
+    const creativeContent = await groqService.generateCreativeContent({
+      ...firstProduct,
+      category: productCategory,
+      specifications: productSpecs
+    });
+    
     return res.json({
       success: true,
       productDetails: {
         name: productName,
-        category,
-        specifications
+        category: productCategory,
+        specifications: productSpecs,
+        barcodeData: barcode
       },
-      results: scrapedResults,
-      aiAnalysis
+      results,
+      aiDescription: creativeContent.creativeContent
     });
   } catch (error) {
-    console.error('Error in price comparison search:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error', 
-      error: error.message 
+    console.error('Error processing barcode:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error processing barcode',
+      error: error.message
     });
   }
 });
 
-// @route   POST api/price-comparison/barcode
-// @desc    Get product details and prices by barcode
-// @access  Public
-router.post('/barcode', async (req, res) => {
+/**
+ * @route   POST api/price-comparison/image
+ * @desc    Process product image and search for prices
+ * @access  Public
+ */
+router.post('/image', async (req, res) => {
   try {
-    const { barcode } = req.body;
-
-    if (!barcode) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Barcode is required' 
+    const { base64Image } = req.body;
+    
+    if (!base64Image) {
+      return res.status(400).json({
+        success: false,
+        message: 'Product image is required'
       });
     }
-
-    // Use Groq API to process barcode data if configured
-    let productDetails = null;
+    
+    // Process the image to extract product information
+    const imageAnalysis = await groqService.processProductImage(base64Image);
+    
+    if (imageAnalysis.isError) {
+      return res.status(400).json({
+        success: false,
+        message: 'Unable to process image',
+        guidance: imageAnalysis.productInfo
+      });
+    }
+    
+    // Extract product name from AI analysis
+    const productInfo = imageAnalysis.productInfo;
+    
+    // Try to parse the AI response to get structured data
+    let productName = 'Unknown Product';
+    
     try {
-      if (groqService.isConfigured()) {
-        const barcodeResult = await groqService.processBarcodeData(barcode);
-        // Attempt to extract structured data from the AI response
-        // This is a simplistic approach - in production you would parse this more carefully
-        const aiResponse = barcodeResult.productIdentification;
-        
-        // Default fallback product details
-        productDetails = {
-          name: `Product for barcode ${barcode}`,
-          category: 'Electronics',
-          specifications: 'Sample specifications',
-          barcodeData: barcode,
-          aiIdentified: true,
-          aiResponse
-        };
+      // Look for product name in the AI analysis
+      const productNameMatch = productInfo.match(/product(?:\s+name)?(?:\s+is)?:?\s*([^.\n]+)/i);
+      if (productNameMatch && productNameMatch[1]) {
+        productName = productNameMatch[1].trim();
+      } else {
+        // If no explicit product name, use the first sentence or part of it
+        const firstSentence = productInfo.split(/[.!?]/)[0];
+        if (firstSentence && firstSentence.length > 10) {
+          productName = firstSentence.length > 50 
+            ? firstSentence.substring(0, 50) + '...'
+            : firstSentence;
+        }
       }
-    } catch (groqError) {
-      console.error('Error using Groq API for barcode processing:', groqError);
+    } catch (parseError) {
+      console.error('Error parsing image analysis:', parseError);
     }
-
-    // If Groq API is not configured or fails, use fallback details
-    if (!productDetails) {
-      productDetails = {
-        name: `Product for barcode ${barcode}`,
-        category: 'Electronics',
-        specifications: 'Sample specifications',
-        barcodeData: barcode,
-        aiIdentified: false
-      };
-    }
-
-    // Use the scraper service to fetch prices for the identified product
-    const scrapedResults = await scraperService.searchProduct(productDetails.name);
-
+    
+    // Now use the extracted product name to search for prices
+    const results = await scraperService.searchProduct(productName);
+    
     return res.json({
       success: true,
-      productDetails,
-      results: scrapedResults
+      productDetails: {
+        name: productName,
+        imageAnalysis: productInfo
+      },
+      results
     });
   } catch (error) {
-    console.error('Error in barcode lookup:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error', 
-      error: error.message 
+    console.error('Error processing product image:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error processing product image',
+      error: error.message
     });
   }
 });
-
-// Helper function to scrape product prices
-// This is a placeholder implementation - in a real app,
-// you would implement proper web scraping for each marketplace
-async function scrapeProductPrices(productName) {
-  // For demonstration purposes, return mock data
-  // In a production app, you would use Puppeteer to scrape real prices
-  return [
-    {
-      marketplace: 'Amazon',
-      price: (Math.random() * 100 + 50).toFixed(2),
-      url: `https://amazon.com/s?k=${encodeURIComponent(productName)}`,
-      inStock: true,
-      shipping: 'Free with Prime',
-      rating: (Math.random() * 5).toFixed(1)
-    },
-    {
-      marketplace: 'Flipkart',
-      price: (Math.random() * 100 + 40).toFixed(2),
-      url: `https://flipkart.com/search?q=${encodeURIComponent(productName)}`,
-      inStock: true,
-      shipping: '₹40',
-      rating: (Math.random() * 5).toFixed(1)
-    },
-    {
-      marketplace: 'Reliance Mart',
-      price: (Math.random() * 100 + 45).toFixed(2),
-      url: '#',
-      inStock: Math.random() > 0.3,
-      shipping: 'Varies by location',
-      rating: (Math.random() * 5).toFixed(1)
-    },
-    {
-      marketplace: 'DMart',
-      price: (Math.random() * 100 + 30).toFixed(2),
-      url: '#',
-      inStock: Math.random() > 0.2,
-      shipping: 'Store pickup only',
-      rating: (Math.random() * 5).toFixed(1)
-    }
-  ];
-}
 
 module.exports = router;

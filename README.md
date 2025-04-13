@@ -1,8 +1,8 @@
 ![github-submission-banner](https://github.com/user-attachments/assets/a1493b84-e4e2-456e-a791-ce35ee2bcf2f)
 
-# 🚀 Cumpair - Local & Hypermarket Price Comparison
+# 🚀 Cumpair - AI-Powered Price Comparison Platform
 
-> Empowering consumers with real-time price comparisons between local stores and major hypermarkets.
+> Empowering consumers with cyberpunk-styled, AI-enhanced price comparisons across multiple retailers.
 
 ---
 
@@ -14,7 +14,7 @@
 
 ## 🎯 Objective
 
-Cumpair addresses the challenge consumers face when trying to find the best prices for products across different retailers. By allowing users to input product details via text or barcode scanning, our application delivers real-time price comparisons between local stores and major hypermarkets like Dmart, Pai, Reliance Mart, Amazon, and Flipkart.
+Cumpair addresses the challenge consumers face when trying to find the best prices for products across different retailers. Our platform uses cutting-edge AI technology to help users search for products via text queries or image uploads, delivering real-time price comparisons across major retailers including Amazon, Flipkart, DMart, Reliance Digital, and Croma.
 
 Our solution serves budget-conscious shoppers, enabling them to make informed purchasing decisions based on accurate price data, saving both time and money while promoting fair market competition.
 
@@ -29,7 +29,7 @@ Our solution serves budget-conscious shoppers, enabling them to make informed pu
 - Sid (GitHub: sid1887 / Role: Lead Developer)
 - [Add additional team members]
 
-### Your Approach:  
+### Our Approach:  
 - We chose this problem because price comparison remains a fragmented experience for consumers, requiring multiple apps and websites
 - Key challenges include scraping real-time pricing data from various sources and normalizing it for accurate comparisons
 - Our breakthrough was integrating Groq's AI to enhance web scraping capabilities and provide intelligent product recommendations
@@ -39,14 +39,14 @@ Our solution serves budget-conscious shoppers, enabling them to make informed pu
 ## 🛠️ Tech Stack
 
 ### Core Technologies Used:
-- Frontend: React with Tailwind CSS
-- Backend: Node.js with Express
-- Database: MongoDB
-- APIs: Groq API, Web scraping with Puppeteer
-- Hosting: Vercel/Netlify for frontend, Render for backend
+- **Frontend**: React with Tailwind CSS for a cyberpunk-themed UI
+- **Backend**: Node.js with Express
+- **AI Integration**: Groq API for advanced AI capabilities
+- **Data Scraping**: Web scraping with Puppeteer
+- **Hosting**: Vercel/Netlify for frontend, Render for backend
 
 ### Sponsor Technologies Used (if any):
-- [✅] **Groq:** _Powering AI-assisted web scraping and product recommendations_  
+- [✅] **Groq:** _Powering AI-assisted web scraping, image recognition, and product recommendations_  
 - [ ] **Monad:** _Your blockchain implementation_  
 - [ ] **Fluvio:** _Real-time data handling_  
 - [ ] **Base:** _AgentKit / OnchainKit / Smart Wallet usage_  
@@ -58,14 +58,19 @@ Our solution serves budget-conscious shoppers, enabling them to make informed pu
 
 ## ✨ Key Features
 
-Highlight the most important features of your project:
-
-- ✅ Text and barcode-based product input  
-- ✅ Real-time price comparison from multiple sources
+### Core Functionality:
+- ✅ Text and image-based product search  
+- ✅ Real-time price comparison from multiple retailers
 - ✅ AI-enhanced web scraping using Groq
-- ✅ Sleek dark-mode UI with neon accents
+- ✅ Detailed product specifications and price history charts
+- ✅ Best deal detection and lowest price highlighting
 
-Add images, GIFs, or screenshots if helpful!
+### UI/UX Highlights:
+- ✅ Cyberpunk-themed interface with neon accents and animated components
+- ✅ Responsive design that works on desktop and mobile
+- ✅ Interactive product cards with hover effects
+- ✅ Animated glitch effects and scanline overlays
+- ✅ Staggered animations for smooth content loading
 
 ---
 
@@ -113,6 +118,14 @@ cd ../frontend
 npm install
 ```
 
+### Environment Variables:
+Create a `.env` file in the backend directory with the following:
+```
+PORT=5000
+MONGODB_URI=your_mongodb_connection_string
+GROQ_API_KEY=your_groq_api_key
+```
+
 ### Running the Application:
 ```bash
 # Run backend and frontend in separate terminal windows
@@ -131,13 +144,34 @@ Frontend runs on http://localhost:3000
 
 ---
 
+## ✨ Advanced UI & Groq AI Features
+
+Our application leverages a cyberpunk-themed UI and Groq AI's powerful capabilities:
+
+### UI Components:
+- 🎨 **Cyberpunk Aesthetic**: Dark theme with neon accents, glitch effects, and animated elements
+- 📱 **Responsive Design**: Fully responsive from mobile to desktop
+- 🔄 **Interactive Elements**: Animated cards, hover effects, and micro-interactions
+- 📊 **Visual Data Display**: Attractive price charts and comparison tables
+
+### Groq AI Integration:
+- 🧠 **Multimodal Search**: Search for products using text or image uploads
+- 👁️ **Image Recognition**: Upload product images for AI-powered analysis
+- 📊 **Price Analysis**: AI-driven detection of the best deals and price trends
+- 🤖 **Smart Recommendations**: Related product suggestions based on search history
+
+---
+
 ## 🧬 Future Scope
 
-List improvements, extensions, or follow-up features:
+Plans for future development:
 
 - 📈 Historical price tracking and alerts  
 - 🛡️ User accounts with wishlist and price drop notifications  
-- 🌐 Expansion to more hypermarkets and local retailers  
+- 🌐 Expansion to more hypermarkets and local retailers
+- 📱 Mobile app versions for iOS and Android
+- 🔍 Barcode scanning for in-store price checks
+- 🤖 AI-powered shopping assistant with personalized recommendations
 
 ---
 
@@ -145,13 +179,15 @@ List improvements, extensions, or follow-up features:
 
 - Groq API for AI-enhanced functionality
 - Puppeteer for web scraping
-- QuaggaJS for barcode scanning
 - React and Tailwind CSS for frontend development
+- UI components inspired by the cyberpunk aesthetic
+- Lucide React for icons
+- Inter and JetBrains Mono fonts for typography
 
 ---
 
 ## 🏁 Final Words
 
-The Cumpair project represents our vision for simplifying retail price comparison, empowering consumers with data-driven purchasing decisions. Through this hackathon, we've learned valuable lessons about web scraping, AI integration, and building user-centric interfaces.
+The Cumpair project represents our vision for the future of retail price comparison, combining cutting-edge AI technology with a visually striking cyberpunk interface. Our goal is to empower consumers with data-driven purchasing decisions in a way that feels both futuristic and intuitive.
 
 ---

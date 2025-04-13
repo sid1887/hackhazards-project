@@ -2,18 +2,244 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  background-color: theme('colors.dark-bg');
-  color: white;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+@layer base {
+  :root {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 0 0% 98%;
+    --primary-foreground: 240 5.9% 10%;
+
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 198 76% 49%;
+
+    --radius: 0.75rem;
+  }
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', sans-serif;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: theme('colors.dark-bg');
+    color: white;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer components {
+  .cyber-card {
+    @apply rounded-lg bg-black/30 backdrop-blur-lg border border-white/10 shadow-lg overflow-hidden transition-all duration-300 hover:border-cyber-blue/30 hover:shadow-cyber-blue/10;
+  }
+  
+  .cyber-input {
+    @apply bg-black/50 border border-cyber-blue/50 text-white rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-cyber-blue focus:border-transparent transition-all duration-300;
+  }
+  
+  .cyber-button {
+    @apply px-4 py-2 bg-cyber-blue/80 hover:bg-cyber-blue text-white rounded-md transition-all duration-300 hover:shadow-[0_0_15px_rgba(30,174,219,0.5)] font-medium transform hover:scale-105;
+  }
+  
+  .glitch-text {
+    @apply relative inline-block;
+  }
+  
+  .glass-card {
+    @apply relative overflow-hidden rounded-xl bg-white/10 p-6 border border-white/20 backdrop-blur-md shadow-xl transition-all duration-300 hover:bg-white/15 hover:border-white/30 hover:shadow-2xl;
+  }
+  
+  .glass-card::before {
+    @apply content-[''] absolute inset-0 bg-gradient-to-br from-white/5 via-white/10 to-transparent rounded-xl pointer-events-none;
+  }
+  
+  /* Modified neon-border to remove flashing RGB effects */
+  .neon-border {
+    @apply relative transition-all duration-300;
+  }
+  
+  .neon-border:hover {
+    @apply shadow-lg;
+    box-shadow: 0 0 20px rgba(30, 174, 219, 0.2);
+  }
+  
+  .cyber-grid-bg {
+    @apply relative;
+  }
+  
+  .cyber-grid-bg::before {
+    @apply content-[''] absolute inset-0 bg-cyber-grid opacity-5 bg-[size:30px_30px] pointer-events-none;
+  }
+  
+  /* Scroll animations */
+  .fade-in-on-scroll {
+    @apply opacity-0 translate-y-10 transition-all duration-700;
+  }
+  
+  .fade-in-on-scroll.active {
+    @apply opacity-100 translate-y-0;
+  }
+  
+  .slide-in-left {
+    @apply opacity-0 -translate-x-10 transition-all duration-700;
+  }
+  
+  .slide-in-left.active {
+    @apply opacity-100 translate-x-0;
+  }
+  
+  .slide-in-right {
+    @apply opacity-0 translate-x-10 transition-all duration-700;
+  }
+  
+  .slide-in-right.active {
+    @apply opacity-100 translate-x-0;
+  }
+  
+  .scale-in {
+    @apply opacity-0 scale-90 transition-all duration-700;
+  }
+  
+  .scale-in.active {
+    @apply opacity-100 scale-100;
+  }
+  
+  /* Background elements */
+  .bg-image-corner-1 {
+    @apply fixed top-0 right-0 w-[500px] h-[500px] bg-no-repeat bg-right-top opacity-10 pointer-events-none z-[-1] blur-sm;
+    background-size: contain;
+  }
+  
+  .bg-image-corner-2 {
+    @apply fixed bottom-0 left-0 w-[500px] h-[500px] bg-no-repeat bg-left-bottom opacity-10 pointer-events-none z-[-1] blur-sm;
+    background-size: contain;
+  }
+  
+  /* Enhanced animations */
+  @keyframes scanlines {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+  
+  .animate-scanlines {
+    animation: scanlines 2s linear infinite;
+  }
+  
+  @keyframes glitch {
+    0% { transform: translate(0); }
+    20% { transform: translate(-2px, 2px); }
+    40% { transform: translate(-2px, -2px); }
+    60% { transform: translate(2px, 2px); }
+    80% { transform: translate(2px, -2px); }
+    100% { transform: translate(0); }
+  }
+  
+  .animate-glitch {
+    animation: glitch 0.2s ease-in-out;
+  }
+  
+  .scanline {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  
+  .scanline::before {
+    content: "";
+    position: absolute;
+    width: 100%;
+    height: 1px;
+    background: rgba(30, 174, 219, 0.3);
+    animation: scanline 6s linear infinite;
+  }
+  
+  @keyframes scanline {
+    0% {
+      top: 0%;
+    }
+    100% {
+      top: 100%;
+    }
+  }
+  
+  /* Add hover effect for feature cards */
+  .feature-card {
+    @apply relative overflow-hidden transition-all duration-500;
+  }
+  
+  .feature-card::after {
+    @apply content-[''] absolute top-0 left-0 w-full h-full bg-gradient-to-r from-cyber-blue/0 via-cyber-blue/10 to-cyber-blue/0 opacity-0 transition-opacity duration-300;
+  }
+  
+  .feature-card:hover::after {
+    @apply opacity-100;
+  }
+  
+  /* Enhanced button hover effects */
+  .enhanced-button {
+    @apply relative overflow-hidden;
+  }
+  
+  .enhanced-button::before {
+    @apply content-[''] absolute top-0 left-0 w-0 h-full bg-white/10 transition-all duration-300 ease-out;
+  }
+  
+  .enhanced-button:hover::before {
+    @apply w-full;
+  }
+  
+  /* Cyber grid layout */
+  .cyber-grid {
+    @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6;
+  }
+}
+
+/* Scrollbar customization */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #121212;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #1EAEDB;
 }
