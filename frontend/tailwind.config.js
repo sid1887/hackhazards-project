@@ -58,7 +58,18 @@ module.exports = {
         // Additional accents for subtle gradients
         'neon-cyan': '#00FFFF',
         'neon-magenta': '#FF00FF',
-        // Additional cyberpunk colors
+        // Cyberpunk color palette from glitch-price-forge
+        'cyber': {
+          black: '#0A0A0A',         // Deep, almost black
+          dark: '#1C1C1E',           // Slightly lighter dark tone
+          primary: '#4A90E2',        // Soft, modern blue
+          secondary: '#7E57C2',      // Muted purple
+          accent: '#00BCD4',         // Teal-like blue
+          text: '#E0E0E0',           // Light gray for text
+          muted: '#555555',          // Soft gray for secondary text
+          border: '#2C2C2E'          // Dark border color
+        },
+        // Existing neon colors
         'cyber-blue': '#00F0FF',
         'cyber-green': '#39FF14',
         'cyber-purple': '#BC13FE',
@@ -129,6 +140,24 @@ module.exports = {
           '40%': { transform: 'translate(-5px, -5px)' },
           '60%': { transform: 'translate(5px, 5px)' },
           '80%': { transform: 'translate(5px, -5px)' },
+          '100%': { transform: 'translate(0)' }
+        },
+        'glitch-text': {
+          '0%': { textShadow: '0.05em 0 0 rgba(255,0,0,0.75), -0.05em -0.025em 0 rgba(0,255,0,0.75), -0.025em 0.05em 0 rgba(0,0,255,0.75)' },
+          '14%': { textShadow: '0.05em 0 0 rgba(255,0,0,0.75), -0.05em -0.025em 0 rgba(0,255,0,0.75), -0.025em 0.05em 0 rgba(0,0,255,0.75)' },
+          '15%': { textShadow: '-0.05em -0.025em 0 rgba(255,0,0,0.75), 0.025em 0.025em 0 rgba(0,255,0,0.75), -0.05em -0.05em 0 rgba(0,0,255,0.75)' },
+          '49%': { textShadow: '-0.05em -0.025em 0 rgba(255,0,0,0.75), 0.025em 0.025em 0 rgba(0,255,0,0.75), -0.05em -0.05em 0 rgba(0,0,255,0.75)' },
+          '50%': { textShadow: '0.025em 0.05em 0 rgba(255,0,0,0.75), 0.05em 0 0 rgba(0,255,0,0.75), 0 -0.05em 0 rgba(0,0,255,0.75)' },
+          '99%': { textShadow: '0.025em 0.05em 0 rgba(255,0,0,0.75), 0.05em 0 0 rgba(0,255,0,0.75), 0 -0.05em 0 rgba(0,0,255,0.75)' },
+          '100%': { textShadow: '-0.025em 0 0 rgba(255,0,0,0.75), -0.025em -0.025em 0 rgba(0,255,0,0.75), -0.025em -0.05em 0 rgba(0,0,255,0.75)' }
+        },
+        'glitch-anim': {
+          '0%': { opacity: '0.2', transform: 'translate(-2px, -2px)', clipPath: 'inset(20% 0 40% 0)' },
+          '20%': { opacity: '0.4', transform: 'translate(2px, 2px)', clipPath: 'inset(60% 0 10% 0)' },
+          '40%': { opacity: '0.6', transform: 'translate(2px, -2px)', clipPath: 'inset(10% 0 60% 0)' },
+          '60%': { opacity: '0.4', transform: 'translate(-2px, 2px)', clipPath: 'inset(40% 0 20% 0)' },
+          '80%': { opacity: '0.2', transform: 'translate(-1px, -1px)', clipPath: 'inset(80% 0 5% 0)' },
+          '100%': { opacity: '0.8', transform: 'translate(1px, 1px)', clipPath: 'inset(5% 0 80% 0)' }
         },
         'neon-flicker': {
           '0%': { opacity: '1' },
@@ -237,7 +266,7 @@ module.exports = {
         'sans': ['Inter', 'Roboto', 'ui-sans-serif', 'system-ui'],
         'mono': ['JetBrains Mono', 'Fira Code', 'ui-monospace', 'SFMono-Regular'],
         'tech': ['Orbitron', 'Rajdhani', 'sans-serif'],
-        'cyber': ['Cyberpunk', 'Orbitron', 'sans-serif'],
+        'cyber': ['Orbitron', 'JetBrains Mono', 'monospace'], // Updated cyber font stack
         'display': ['BlenderPro', 'Inter', 'sans-serif'],
       },
       textShadow: {
@@ -354,6 +383,7 @@ module.exports = {
     require('@tailwindcss/typography'),
     require('@tailwindcss/forms'),
     require('@tailwindcss/aspect-ratio'),
+    require("tailwindcss-animate"), // Added for glitch animations
     // Create custom utilities for text shadows
     function({ addUtilities }) {
       const newUtilities = {

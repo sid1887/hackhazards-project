@@ -1,34 +1,23 @@
-.App {
+
+#root {
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 0;
   text-align: center;
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em rgba(155, 135, 245, 0.8));
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
-}
-
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
-}
-
-.App-link {
-  color: #61dafb;
-}
-
-@keyframes App-logo-spin {
+@keyframes logo-spin {
   from {
     transform: rotate(0deg);
   }
@@ -37,74 +26,319 @@
   }
 }
 
-/* Custom styles to complement Tailwind CSS */
-
-/* Add custom glow effects for neon elements */
-.neon-glow {
-  box-shadow: 0 0 10px theme('colors.neon-blue'), 0 0 20px theme('colors.neon-blue');
-}
-
-.neon-text-glow {
-  text-shadow: 0 0 10px theme('colors.neon-blue'), 0 0 20px theme('colors.neon-blue');
-}
-
-/* Custom animation for the price comparison cards */
-@keyframes pulse-border {
-  0% {
-    box-shadow: 0 0 0 0 rgba(0, 240, 255, 0.4);
-  }
-  70% {
-    box-shadow: 0 0 0 10px rgba(0, 240, 255, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(0, 240, 255, 0);
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+    animation: logo-spin infinite 20s linear;
   }
 }
 
-.price-card-highlight {
-  animation: pulse-border 2s infinite;
+/* Glassmorphism */
+.glassmorphism-panel {
+  background: rgba(26, 31, 44, 0.3);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.5rem;
 }
 
-/* Custom scrollbar for the dark theme */
-::-webkit-scrollbar {
-  width: 8px;
+.glassmorphism-panel:hover {
+  box-shadow: 0 0 15px rgba(155, 135, 245, 0.2);
+  border-color: rgba(155, 135, 245, 0.3);
 }
 
-::-webkit-scrollbar-track {
-  background: #121212;
+/* Terminal-style panel */
+.terminal-panel {
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: 0.5rem;
+  border-left: 3px solid #9b87f5;
+  box-shadow: 
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06),
+    0 0 15px -3px rgba(155, 135, 245, 0.2);
 }
 
-::-webkit-scrollbar-thumb {
-  background: #333;
-  border-radius: 4px;
+/* Code block styling */
+.code-block {
+  background-color: rgba(26, 31, 44, 0.8);
+  border-radius: 0.5rem;
+  border-left: 3px solid #9b87f5;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #555;
+.code-block pre {
+  font-family: 'JetBrains Mono', monospace;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 
-/* Barcode scanner animation */
-@keyframes scan-animation {
-  0% {
-    height: 0%;
-    top: 0;
-    opacity: 0.5;
+/* Dot pattern overlay */
+.dot-pattern {
+  background-image: radial-gradient(rgba(155, 135, 245, 0.1) 1px, transparent 1px);
+  background-size: 20px 20px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* Button glow effects */
+.btn-glow:hover {
+  box-shadow: 0 0 10px 2px rgba(155, 135, 245, 0.7);
+}
+
+/* Enhanced animations */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.animate-float {
+  animation: float 5s ease-in-out infinite;
+}
+
+/* Animation delays */
+.animation-delay-100 {
+  animation-delay: 0.1s;
+}
+
+.animation-delay-200 {
+  animation-delay: 0.2s;
+}
+
+.animation-delay-300 {
+  animation-delay: 0.3s;
+}
+
+.animation-delay-400 {
+  animation-delay: 0.4s;
+}
+
+/* Neon text pulse */
+@keyframes neon-pulse {
+  0%, 100% { text-shadow: 0 0 5px rgba(155, 135, 245, 0.8), 0 0 10px rgba(155, 135, 245, 0.5); }
+  50% { text-shadow: 0 0 20px rgba(155, 135, 245, 0.8), 0 0 30px rgba(155, 135, 245, 0.5); }
+}
+
+.animate-neon-pulse {
+  animation: neon-pulse 3s ease-in-out infinite;
+}
+
+/* Cyberpunk circuit lines */
+.cyber-lines {
+  position: relative;
+  overflow: hidden;
+}
+
+.cyber-lines::before,
+.cyber-lines::after {
+  content: '';
+  position: absolute;
+  background: linear-gradient(90deg, transparent, rgba(155, 135, 245, 0.5), transparent);
+  width: 200%;
+  height: 1px;
+  animation: cyber-line 8s linear infinite;
+}
+
+.cyber-lines::before {
+  top: 0;
+  left: -100%;
+}
+
+.cyber-lines::after {
+  bottom: 0;
+  left: -100%;
+  animation-delay: 4s;
+}
+
+@keyframes cyber-line {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(100%); }
+}
+
+/* Image hover effect */
+.cyber-image {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.5s ease;
+}
+
+.cyber-image::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(45deg, rgba(155, 135, 245, 0.4), rgba(14, 165, 233, 0.4));
+  opacity: 0;
+  transition: all 0.5s ease;
+}
+
+.cyber-image:hover::before {
+  opacity: 0.5;
+}
+
+.cyber-image:hover {
+  transform: scale(1.03);
+  box-shadow: 0 0 20px rgba(155, 135, 245, 0.5);
+}
+
+/* Radar ping effect */
+@keyframes radar-ping {
+  0% { 
+    transform: scale(0.9);
+    opacity: 0.6;
   }
-  50% {
-    height: 100%;
-    opacity: 1;
+  70% { 
+    transform: scale(1.5);
+    opacity: 0;
   }
-  100% {
-    height: 0%;
-    top: 100%;
-    opacity: 0.5;
+  100% { 
+    transform: scale(0.9);
+    opacity: 0;
   }
 }
 
-.barcode-scanner-line {
+.radar-ping {
+  position: relative;
+}
+
+.radar-ping::after {
+  content: '';
   position: absolute;
   width: 100%;
-  height: 2px;
-  background: theme('colors.neon-green');
-  animation: scan-animation 2s infinite;
+  height: 100%;
+  top: 0;
+  left: 0;
+  border-radius: 50%;
+  background: rgba(14, 165, 233, 0.4);
+  z-index: -1;
+  animation: radar-ping 2s ease-out infinite;
+}
+
+/* Neon border glow */
+.neon-border-glow {
+  position: relative;
+}
+
+.neon-border-glow::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  background: linear-gradient(45deg, #9b87f5, #0EA5E9, #D946EF, #9b87f5);
+  background-size: 400% 400%;
+  animation: border-flow 8s ease infinite;
+  border-radius: calc(0.5rem + 3px);
+  z-index: -1;
+}
+
+@keyframes border-flow {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Glitch animation for buttons */
+@keyframes glitch {
+  0% { 
+    clip-path: inset(40% 0 61% 0);
+    transform: translate(0);
+  }
+  20% { 
+    clip-path: inset(92% 0 1% 0);
+    transform: translate(-2px, 2px);
+  }
+  40% { 
+    clip-path: inset(43% 0 1% 0);
+    transform: translate(2px, -2px);
+  }
+  60% { 
+    clip-path: inset(25% 0 58% 0);
+    transform: translate(2px, 2px);
+  }
+  80% { 
+    clip-path: inset(54% 0 7% 0);
+    transform: translate(-2px, -2px);
+  }
+  100% { 
+    clip-path: inset(58% 0 43% 0);
+    transform: translate(0);
+  }
+}
+
+/* Scanline animation */
+@keyframes scanlines {
+  0% { 
+    background-position: 0px -100vh;
+  }
+  80% { 
+    background-position: 0px 100vh;
+  }
+  100% { 
+    background-position: 0px 100vh;
+  }
+}
+
+.scanlines {
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  z-index: 15;
+  opacity: 0.3;
+}
+
+.scanlines::before {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 50%,
+    rgba(0, 0, 0, 0.5) 51%,
+    transparent 51.5%
+  );
+  background-size: 100% 4px;
+  animation: scanlines 10s linear infinite;
+}
+
+/* Data flow effect */
+.data-flow {
+  position: relative;
+}
+
+.data-flow::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2px;
+  height: 100%;
+  background: linear-gradient(to bottom, transparent, #0EA5E9, transparent);
+  animation: data-flow 2s infinite;
+}
+
+@keyframes data-flow {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+/* Circuit pattern */
+.circuit-pattern {
+  background-image: 
+    linear-gradient(rgba(155, 135, 245, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(155, 135, 245, 0.1) 1px, transparent 1px),
+    linear-gradient(rgba(14, 165, 233, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(14, 165, 233, 0.05) 1px, transparent 1px);
+  background-size: 50px 50px, 50px 50px, 10px 10px, 10px 10px;
+  background-position: -1px -1px, -1px -1px, -1px -1px, -1px -1px;
 }

@@ -4,6 +4,7 @@ const groqService = require('../services/groqService');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
+const scraperService = require('../scraper/scraperService');
 
 // Configure multer for image uploads
 const storage = multer.diskStorage({
@@ -337,6 +338,116 @@ router.post('/process-ocr', async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Error processing OCR text',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @route   POST api/groq/identify-product
+ * @desc    Upload and analyze a product image to identify it
+ * @access  Public
+ */
+router.post('/identify-product', upload.single('productImage'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Product image is required'
+      });
+    }
+    
+    const filePath = req.file.path;
+    
+    // Step 1: Identify the product from the image using Groq Vision
+    const identificationResult = await groqService.identifyProductFromImage(filePath);
+    
+    if (!identificationResult.success) {
+      // Clean up file if there was an error
+      try { fs.unlinkSync(filePath); } catch (e) { console.error('Error deleting file:', e); }
+      
+      return res.status(400).json({
+        success: false,
+        message: 'Failed to identify product from the image',
+        error: identificationResult.error || 'Unknown error',
+        suggestion: identificationResult.suggestion
+      });
+    }
+    
+    // Step 2: Extract keywords for targeted scraping
+    const { productData } = identificationResult;
+    const searchKeywords = productData.keywords || productData.product;
+    
+    if (!searchKeywords) {
+      // Clean up file
+      try { fs.unlinkSync(filePath); } catch (e) { console.error('Error deleting file:', e); }
+      
+      return res.status(400).json({
+        success: false,
+        message: 'Could not extract search keywords from the image',
+        productData
+      });
+    }
+    
+    // Step 3: Trigger web scraping using the keywords
+    const scrapingResults = await scraperService.scrapeProductsByKeywords(searchKeywords);
+    
+    // Clean up file after processing
+    try { fs.unlinkSync(filePath); } catch (e) { console.error('Error deleting file:', e); }
+    
+    // Return both identification and scraping results
+    return res.json({
+      success: true,
+      identificationResult: {
+        productData,
+        rawResponse: identificationResult.rawResponse
+      },
+      scrapingResults
+    });
+    
+  } catch (error) {
+    console.error('Error in product identification flow:', error);
+    
+    // Clean up file if it exists
+    if (req.file && req.file.path) {
+      try { fs.unlinkSync(req.file.path); } catch (e) { console.error('Error deleting file:', e); }
+    }
+    
+    return res.status(500).json({
+      success: false,
+      message: 'Error processing product image',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @route   POST api/groq/product-summary
+ * @desc    Generate comprehensive product summary based on consolidated data
+ * @access  Public
+ */
+router.post('/product-summary', async (req, res) => {
+  try {
+    const { consolidatedData } = req.body;
+    
+    if (!consolidatedData) {
+      return res.status(400).json({
+        success: false,
+        message: 'Consolidated product data is required'
+      });
+    }
+    
+    const summaryResult = await groqService.generateProductSummary(consolidatedData);
+    
+    return res.json({
+      success: true,
+      data: summaryResult
+    });
+  } catch (error) {
+    console.error('Error generating product summary:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error generating product summary',
       error: error.message
     });
   }

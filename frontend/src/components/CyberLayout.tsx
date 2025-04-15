@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import GlitchHeader from './GlitchHeader';
+import Footer from './Footer';
+import CyberBackground from './CyberBackground';
+import HeroParticles from './HeroParticles';
 
 /**
  * CyberLayout Component
@@ -7,11 +10,17 @@ import GlitchHeader from './GlitchHeader';
  * A base layout component that provides the cyberpunk aesthetic structure
  * including background effects, responsive layout, and animated transitions.
  */
-const CyberLayout = ({ 
+const CyberLayout: React.FC<{
+  children: React.ReactNode;
+  title?: string;
+  subtitle?: string;
+  background?: 'grid' | 'dots' | 'minimal' | 'matrix';
+  noHeader?: boolean;
+}> = ({ 
   children,
   title = 'Cumpair',
   subtitle,
-  background = 'grid', // 'grid', 'dots', 'minimal', 'matrix'
+  background = 'grid',
   noHeader = false,
 }) => {
   const [isLoaded, setIsLoaded] = useState(false);
@@ -31,7 +40,15 @@ const CyberLayout = ({
   }, []);
 
   return (
-    <div className={`min-h-screen bg-dark-bg text-dark-text-primary ${backgroundClasses[background]}`}>
+    <div className={`min-h-screen bg-dark-bg text-dark-text-primary ${backgroundClasses[background]} relative overflow-hidden`}>
+      {/* Dynamic background effects */}
+      <CyberBackground />
+      
+      {/* Hero particles effect at the top section */}
+      <div className="absolute top-0 left-0 right-0 h-[600px] pointer-events-none">
+        <HeroParticles />
+      </div>
+      
       {/* Gradient overlay at the top */}
       <div className="fixed top-0 left-0 right-0 h-64 bg-gradient-to-b from-cyber-dark-blue/50 to-transparent pointer-events-none z-0"></div>
       
@@ -59,17 +76,14 @@ const CyberLayout = ({
         )}
         
         {/* Main content area */}
-        <main>
+        <main className="relative z-10">
           {children}
         </main>
         
-        {/* Footer with attribution */}
-        <footer className="mt-20 py-6 text-center text-dark-text-secondary border-t border-dark-border">
-          <div className="font-mono text-xs tracking-wider">
-            <p>CUMPAIR • PRICE COMPARISON SYSTEM</p>
-            <p className="mt-2 text-dark-text-disabled">© {new Date().getFullYear()} • POWERED BY GROQ AI</p>
-          </div>
-        </footer>
+        {/* Footer with custom component */}
+        <div className="mt-20">
+          <Footer />
+        </div>
       </div>
       
       {/* Radial glow effect in corner */}

@@ -10,207 +10,267 @@ const groqService = require('../services/groqService');
  */
 router.post('/search', async (req, res) => {
   try {
-    const { productName, category, expectedPrice, specifications } = req.body;
+    const { query } = req.body;
     
-    if (!productName) {
+    if (!query) {
       return res.status(400).json({
         success: false,
-        message: 'Product name is required'
+        message: 'Search query is required'
       });
     }
     
-    // Get price comparison results from scraper service
-    const results = await scraperService.searchProduct(productName);
-    
-    // Format specifications for AI analysis if provided
-    let userPreferences = '';
-    if (category) userPreferences += `Category: ${category}. `;
-    if (expectedPrice) userPreferences += `Expected price range: ₹${expectedPrice}. `;
-    if (specifications) userPreferences += `Desired specifications: ${specifications}. `;
-    
-    // Use Groq AI to analyze the price comparison results
-    const aiAnalysis = await groqService.analyzePriceComparison(results);
-    
-    // Get AI-enhanced recommendations if user provided preferences
-    let recommendations = null;
-    if (userPreferences) {
-      recommendations = await groqService.getPersonalizedRecommendations(
-        productName,
-        userPreferences,
-        expectedPrice,
-        results
-      );
-    }
-    
-    // Get technical specifications explanation if available
-    let specExplanation = null;
-    if (results.length > 0 && results[0].specifications) {
-      specExplanation = await groqService.explainFeatures(results[0].specifications);
-    }
+    const results = await scraperService.searchProduct(query);
     
     return res.json({
       success: true,
-      results,
-      aiAnalysis: aiAnalysis.analysis,
-      recommendations: recommendations ? recommendations.recommendations : null,
-      specExplanation: specExplanation ? specExplanation.simplifiedExplanation : null
+      query,
+      count: results.length,
+      data: results
     });
   } catch (error) {
-    console.error('Error searching product:', error);
+    console.error('Error in product search:', error);
     return res.status(500).json({
       success: false,
-      message: 'Error searching product',
+      message: 'Error searching for products',
       error: error.message
     });
   }
 });
 
 /**
- * @route   POST api/price-comparison/barcode
- * @desc    Search for a product using barcode data
+ * @route   POST api/price-comparison/image-search
+ * @desc    Search products based on image analysis
  * @access  Public
  */
-router.post('/barcode', async (req, res) => {
+router.post('/image-search', async (req, res) => {
   try {
-    const { barcode } = req.body;
+    const { imageData, keywords } = req.body;
     
-    if (!barcode) {
-      return res.status(400).json({
-        success: false,
-        message: 'Barcode data is required'
+    // If user provided both image and keywords, prioritize keywords
+    if (keywords) {
+      const results = await scraperService.scrapeProductsByKeywords(keywords);
+      
+      return res.json({
+        success: true,
+        source: 'user keywords',
+        ...results
       });
     }
     
-    // Process barcode data to identify the product
-    const productInfo = await groqService.processBarcodeData(barcode);
-    
-    // Extract product name and details from AI response
-    const productIdentification = productInfo.productIdentification;
-    
-    // Try to parse the AI response to get structured data
-    let productName = 'Unknown Product';
-    let productCategory = '';
-    let productSpecs = '';
-    
-    try {
-      // This assumes the AI formats its response in a somewhat consistent way
-      const nameMatch = productIdentification.match(/product name:?\s*([^\n.]+)/i);
-      if (nameMatch && nameMatch[1]) {
-        productName = nameMatch[1].trim();
+    // If no explicit keywords but image is provided in base64
+    if (imageData) {
+      // Process the image with Groq Vision
+      const base64Image = imageData.replace(/^data:image\/\w+;base64,/, '');
+      
+      // Save image to temp file for processing
+      const fs = require('fs');
+      const path = require('path');
+      const tempFilePath = path.join(__dirname, '../uploads', `temp-${Date.now()}.jpg`);
+      
+      fs.writeFileSync(tempFilePath, Buffer.from(base64Image, 'base64'));
+      
+      // Process the image using Groq Vision
+      const identificationResult = await groqService.identifyProductFromImage(tempFilePath);
+      
+      // Clean up temp file
+      try { fs.unlinkSync(tempFilePath); } catch (e) { console.error('Error deleting temp file:', e); }
+      
+      if (!identificationResult.success) {
+        return res.status(400).json({
+          success: false,
+          message: 'Failed to identify product from the image',
+          error: identificationResult.error || 'Unknown error',
+          suggestion: identificationResult.suggestion
+        });
       }
       
-      const categoryMatch = productIdentification.match(/category:?\s*([^\n.]+)/i);
-      if (categoryMatch && categoryMatch[1]) {
-        productCategory = categoryMatch[1].trim();
+      // Extract keywords for search
+      const { productData } = identificationResult;
+      const searchKeywords = productData.keywords || productData.product;
+      
+      if (!searchKeywords) {
+        return res.status(400).json({
+          success: false,
+          message: 'Could not extract search keywords from the image',
+          productData
+        });
       }
       
-      const specsMatch = productIdentification.match(/specifications:?\s*([^\n.]+)/i);
-      if (specsMatch && specsMatch[1]) {
-        productSpecs = specsMatch[1].trim();
-      }
-    } catch (parseError) {
-      console.error('Error parsing AI response:', parseError);
+      // Use the extracted keywords to search for products
+      const scrapingResults = await scraperService.scrapeProductsByKeywords(searchKeywords);
+      
+      return res.json({
+        success: true,
+        source: 'image analysis',
+        identificationResult: {
+          productData,
+          rawResponse: identificationResult.rawResponse
+        },
+        ...scrapingResults
+      });
     }
     
-    // Now use the extracted product name to search for prices
-    const results = await scraperService.searchProduct(productName);
-    
-    // Use AI to generate a product review/description
-    const firstProduct = results.length > 0 ? results[0] : { title: productName };
-    const creativeContent = await groqService.generateCreativeContent({
-      ...firstProduct,
-      category: productCategory,
-      specifications: productSpecs
+    return res.status(400).json({
+      success: false,
+      message: 'Either image data or keywords are required'
     });
     
-    return res.json({
-      success: true,
-      productDetails: {
-        name: productName,
-        category: productCategory,
-        specifications: productSpecs,
-        barcodeData: barcode
-      },
-      results,
-      aiDescription: creativeContent.creativeContent
-    });
   } catch (error) {
-    console.error('Error processing barcode:', error);
+    console.error('Error in image-based product search:', error);
     return res.status(500).json({
       success: false,
-      message: 'Error processing barcode',
+      message: 'Error searching for products based on image',
       error: error.message
     });
   }
 });
 
 /**
- * @route   POST api/price-comparison/image
- * @desc    Process product image and search for prices
+ * @route   POST api/price-comparison/consolidate
+ * @desc    Consolidate product data from multiple sources using AI
  * @access  Public
  */
-router.post('/image', async (req, res) => {
+router.post('/consolidate', async (req, res) => {
   try {
-    const { base64Image } = req.body;
+    const { products, keywords } = req.body;
     
-    if (!base64Image) {
+    if (!products || !Array.isArray(products) || products.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'Product image is required'
+        message: 'Product data array is required'
       });
     }
     
-    // Process the image to extract product information
-    const imageAnalysis = await groqService.processProductImage(base64Image);
-    
-    if (imageAnalysis.isError) {
+    if (!keywords) {
       return res.status(400).json({
         success: false,
-        message: 'Unable to process image',
-        guidance: imageAnalysis.productInfo
+        message: 'Search keywords are required for consolidation'
       });
     }
     
-    // Extract product name from AI analysis
-    const productInfo = imageAnalysis.productInfo;
-    
-    // Try to parse the AI response to get structured data
-    let productName = 'Unknown Product';
-    
-    try {
-      // Look for product name in the AI analysis
-      const productNameMatch = productInfo.match(/product(?:\s+name)?(?:\s+is)?:?\s*([^.\n]+)/i);
-      if (productNameMatch && productNameMatch[1]) {
-        productName = productNameMatch[1].trim();
-      } else {
-        // If no explicit product name, use the first sentence or part of it
-        const firstSentence = productInfo.split(/[.!?]/)[0];
-        if (firstSentence && firstSentence.length > 10) {
-          productName = firstSentence.length > 50 
-            ? firstSentence.substring(0, 50) + '...'
-            : firstSentence;
-        }
-      }
-    } catch (parseError) {
-      console.error('Error parsing image analysis:', parseError);
-    }
-    
-    // Now use the extracted product name to search for prices
-    const results = await scraperService.searchProduct(productName);
+    const consolidatedData = await scraperService.consolidateProductData(products, keywords);
     
     return res.json({
       success: true,
-      productDetails: {
-        name: productName,
-        imageAnalysis: productInfo
-      },
-      results
+      data: consolidatedData
     });
   } catch (error) {
-    console.error('Error processing product image:', error);
+    console.error('Error consolidating product data:', error);
     return res.status(500).json({
       success: false,
-      message: 'Error processing product image',
+      message: 'Error consolidating product data',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @route   POST api/price-comparison/details
+ * @desc    Get detailed information for a specific product
+ * @access  Public
+ */
+router.post('/details', async (req, res) => {
+  try {
+    const { product } = req.body;
+    
+    if (!product || !product.link || product.link === '#') {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid product with link is required'
+      });
+    }
+    
+    const detailedProduct = await scraperService.fetchProductDetails(product);
+    
+    return res.json({
+      success: true,
+      data: detailedProduct
+    });
+  } catch (error) {
+    console.error('Error fetching product details:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error fetching product details',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @route   POST api/price-comparison/best-match
+ * @desc    Find the best matching product for given keywords
+ * @access  Public
+ */
+router.post('/best-match', async (req, res) => {
+  try {
+    const { keywords, products } = req.body;
+    
+    if (!keywords) {
+      return res.status(400).json({
+        success: false,
+        message: 'Keywords are required'
+      });
+    }
+    
+    if (!products || !Array.isArray(products) || products.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Products array is required'
+      });
+    }
+    
+    const bestMatchProduct = await scraperService.findBestMatchProduct(keywords, products);
+    
+    return res.json({
+      success: true,
+      keywords,
+      bestMatch: bestMatchProduct
+    });
+  } catch (error) {
+    console.error('Error finding best match product:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error finding best match product',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @route   POST api/price-comparison/analyze
+ * @desc    Analyze product data and provide AI-powered insights
+ * @access  Public
+ */
+router.post('/analyze', async (req, res) => {
+  try {
+    const { products, query } = req.body;
+    
+    if (!products || !Array.isArray(products) || products.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Product data array is required'
+      });
+    }
+    
+    // Get consolidated data
+    const consolidatedData = await scraperService.consolidateProductData(
+      products, 
+      query || 'product comparison'
+    );
+    
+    // Generate comprehensive product summary
+    const summaryResult = await groqService.generateProductSummary(consolidatedData);
+    
+    return res.json({
+      success: true,
+      consolidatedData,
+      summary: summaryResult
+    });
+  } catch (error) {
+    console.error('Error analyzing product data:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error analyzing product data',
       error: error.message
     });
   }

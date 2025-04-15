@@ -1,125 +1,168 @@
 
 import React, { useState } from 'react';
-import { ExternalLink, Info, Tag } from 'lucide-react';
+import { ExternalLink, ArrowDown } from 'lucide-react';
+import { cn } from '../lib/utils';
 
 export interface ProductData {
   id: string;
   name: string;
+  imageUrl?: string;
+  image?: string;
   price: string;
   originalPrice?: string;
   discount?: string;
-  vendor: string;
-  vendorLogo: string;
+  vendor?: string;
+  seller?: string;
+  vendorLogo?: string;
+  sellerLogo?: string;
   rating?: string;
-  inStock: boolean;
+  url?: string;
+  link?: string;
   isBestDeal?: boolean;
   isLowestPrice?: boolean;
-  imageUrl?: string;
-  url: string;
+  inStock?: boolean;
 }
 
 interface DataCardProps {
   product: ProductData;
-  delay?: number;
+  index: number;
 }
 
-const DataCard: React.FC<DataCardProps> = ({ product, delay = 0 }) => {
+const DataCard: React.FC<DataCardProps> = ({ product, index }) => {
   const [isHovered, setIsHovered] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
   
+  const animationDelay = `${index * 100}ms`;
+  
+  // Use the discount directly if provided, otherwise don't calculate it
+  const discount = product.discount;
+  
+  // No need to format price as it's already formatted
+
   return (
     <div 
-      className="glass-card neon-border group hover:scale-[1.02] transition-all duration-300"
-      style={{ animationDelay: `${delay * 100}ms` }}
+      className={cn(
+        'cyber-container rounded-lg overflow-hidden transform transition-all duration-500 opacity-0',
+        'hover:translate-y-[-5px] hover:shadow-[0_0_30px_rgba(14,165,233,0.3)]',
+      )}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      style={{ 
+        animationName: 'fade-in-up', 
+        animationDuration: '0.6s',
+        animationDelay: animationDelay, 
+        animationFillMode: 'forwards' 
+      }}
     >
-      <div className="relative">
-        {/* Best deal badge */}
-        {product.isBestDeal && (
-          <div className="absolute -top-2 -right-2 bg-cyber-purple px-3 py-1 rounded-full text-xs font-bold z-10 shadow-lg shadow-cyber-purple/20">
-            BEST DEAL
-          </div>
-        )}
-        
-        {/* Lowest price badge */}
-        {product.isLowestPrice && !product.isBestDeal && (
-          <div className="absolute -top-2 -right-2 bg-cyber-green px-3 py-1 rounded-full text-xs font-bold z-10 shadow-lg shadow-cyber-green/20">
-            LOWEST PRICE
-          </div>
-        )}
-        
-        <div className="flex flex-col h-full">
-          {/* Vendor header */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center">
-              <img 
-                src={product.vendorLogo} 
-                alt={product.vendor} 
-                className="h-6 w-6 mr-2 rounded-sm"
-              />
-              <span className="text-sm font-medium text-gray-200">{product.vendor}</span>
-            </div>
-            {product.rating && (
-              <div className="bg-yellow-500/20 text-yellow-400 text-xs px-2 py-1 rounded-md flex items-center">
-                ★ {product.rating}
-              </div>
-            )}
-          </div>
+      {/* Highlight labels */}
+      {product.isBestDeal && (
+        <div className="absolute -right-8 top-6 transform rotate-45 bg-cyber-green text-white text-xs px-8 py-1 z-10 shadow-lg">
+          BEST DEAL
+        </div>
+      )}
+      
+      {product.isLowestPrice && (
+        <div className="absolute left-2 top-2 bg-cyber-orange text-white text-xs px-2 py-1 rounded-md z-10">
+          LOWEST PRICE
+        </div>
+      )}
+      
+      {/* Card content */}
+      <div className="flex flex-col h-full">
+        {/* Image section */}
+        <div className="relative h-48 bg-white/5 overflow-hidden">
+          <img 
+            src={product.imageUrl || product.image} 
+            alt={product.name} 
+            className="w-full h-full object-contain p-4 transition-transform duration-300"
+            style={{ transform: isHovered ? 'scale(1.05)' : 'scale(1)' }}
+          />
           
-          {/* Product image */}
-          <div className={`relative aspect-video mb-4 overflow-hidden rounded-md bg-black/30 transition-all duration-300 ${isHovered ? 'shadow-inner shadow-cyber-blue/30' : ''}`}>
-            {product.imageUrl ? (
-              <img 
-                src={product.imageUrl} 
-                alt={product.name} 
-                className={`w-full h-full object-contain p-2 transition-transform duration-500 ${isHovered ? 'scale-105' : ''}`}
-              />
-            ) : (
-              <div className="flex items-center justify-center h-full">
-                <Info className="h-12 w-12 text-gray-500 opacity-50" />
-              </div>
-            )}
+          {/* Discount badge */}
+          {discount && (
+            <div className="absolute top-2 right-2 bg-cyber-pink text-white text-sm font-bold rounded-full w-12 h-12 flex items-center justify-center">
+              {discount}
+            </div>
+          )}
+        </div>
+        
+        {/* Content section */}
+        <div className="p-4 flex-1 flex flex-col">
+          {/* Seller logo */}
+          <div className="mb-2 flex items-center">
+            <img 
+              src={product.vendorLogo || product.sellerLogo} 
+              alt={product.vendor || product.seller || 'Retailer'} 
+              className="h-6 mr-2" 
+            />
+            <span className="text-sm text-gray-400">{product.vendor || product.seller || 'Retailer'}</span>
           </div>
           
           {/* Product name */}
-          <h3 className="font-medium text-white mb-2 line-clamp-2 min-h-[48px] group-hover:text-cyber-blue transition-colors">
+          <h3 className="font-medium mb-2 line-clamp-2" title={product.name}>
             {product.name}
           </h3>
           
-          {/* Price */}
+          {/* Price section */}
           <div className="mt-auto">
-            <div className="flex items-baseline gap-2 mb-1">
-              <span className="text-2xl font-bold text-white group-hover:text-cyber-blue transition-colors">{product.price}</span>
+            <div className="flex items-baseline">
+              <span className="text-xl font-bold neon-text-blue">
+                {product.price}
+              </span>
+              
               {product.originalPrice && (
-                <span className="text-sm text-gray-400 line-through">{product.originalPrice}</span>
-              )}
-              {product.discount && (
-                <span className="text-xs text-cyber-green bg-cyber-green/10 px-2 py-0.5 rounded">
-                  {product.discount}
+                <span className="ml-2 text-sm text-gray-400 line-through">
+                  {product.originalPrice}
                 </span>
               )}
             </div>
             
-            {/* Stock status */}
-            <div className="text-xs mb-4">
-              {product.inStock ? (
-                <span className="text-green-400">In Stock</span>
-              ) : (
-                <span className="text-red-400">Out of Stock</span>
-              )}
-            </div>
-            
-            {/* Button */}
-            <a 
-              href={product.url} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className={`cyber-button w-full flex items-center justify-center transition-all duration-300 ${isHovered ? 'shadow-md shadow-cyber-blue/30' : ''}`}
-            >
-              View Deal <ExternalLink className={`ml-2 h-4 w-4 transition-transform duration-300 ${isHovered ? 'translate-x-1' : ''}`} />
-            </a>
+            {/* Rating */}
+            {product.rating && (
+              <div className="mt-1 flex">
+                <span className="text-cyber-orange mr-1">★</span>
+                <span className="text-xs text-gray-400">{product.rating}</span>
+              </div>
+            )}
           </div>
         </div>
+        
+        {/* Action buttons */}
+        <div className="border-t border-white/5 p-3 flex justify-between">
+          <button 
+            className="text-sm text-gray-300 flex items-center hover:text-cyber-blue transition-colors"
+            onClick={() => setShowDetails(!showDetails)}
+          >
+            <span>{showDetails ? 'Hide' : 'Show'} details</span>
+            <ArrowDown 
+              className={`h-4 w-4 ml-1 transition-transform ${showDetails ? 'rotate-180' : ''}`} 
+            />
+          </button>
+          
+          <a 
+            href={product.url || product.link || '#'} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-sm flex items-center text-cyber-blue hover:text-cyber-purple transition-colors"
+          >
+            <span>Open site</span>
+            <ExternalLink className="h-4 w-4 ml-1" />
+          </a>
+        </div>
+        
+        {/* Expandable details section */}
+        {showDetails && (
+          <div className="border-t border-white/5 p-4 bg-cyber-dark/60 text-sm animate-fade-in">
+            <h4 className="font-cyber text-cyber-pink mb-2">Product Details</h4>
+            <p className="text-gray-300 mb-2">
+              This would display additional product information fetched from the scraper,
+              including specs, availability, and other useful comparison data.
+            </p>
+            <div className="text-xs text-gray-400 mt-3">
+              Last updated: {new Date().toLocaleDateString()}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

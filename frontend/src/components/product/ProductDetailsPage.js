@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import CyberLayout from '../CyberLayout';
+import CyberLayout from '../CyberLayout.tsx';
 
 /**
  * ProductDetailsPage Component
