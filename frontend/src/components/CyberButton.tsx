@@ -22,25 +22,25 @@ const CyberButton: React.FC<CyberButtonProps> = ({
   const [isHovered, setIsHovered] = useState(false);
   const [isPressed, setIsPressed] = useState(false);
   
-  // Define color schemes based on variants
+  // Refined color schemes with more cyberpunk feel
   const colorSchemes = {
     primary: {
-      purple: 'bg-cyber-purple hover:bg-cyber-purple/90 text-white',
-      blue: 'bg-cyber-blue hover:bg-cyber-blue/90 text-white',
-      pink: 'bg-cyber-pink hover:bg-cyber-pink/90 text-white',
-      green: 'bg-cyber-green hover:bg-cyber-green/90 text-white',
+      purple: 'bg-cyber-purple/90 hover:bg-cyber-purple text-white border border-cyber-purple/30',
+      blue: 'bg-cyber-blue/90 hover:bg-cyber-blue text-white border border-cyber-blue/30',
+      pink: 'bg-cyber-pink/90 hover:bg-cyber-pink text-white border border-cyber-pink/30',
+      green: 'bg-cyber-green/90 hover:bg-cyber-green text-white border border-cyber-green/30',
     },
     secondary: {
-      purple: 'bg-cyber-purple/20 hover:bg-cyber-purple/30 text-cyber-purple',
-      blue: 'bg-cyber-blue/20 hover:bg-cyber-blue/30 text-cyber-blue',
-      pink: 'bg-cyber-pink/20 hover:bg-cyber-pink/30 text-cyber-pink',
-      green: 'bg-cyber-green/20 hover:bg-cyber-green/30 text-cyber-green',
+      purple: 'bg-cyber-dark/60 hover:bg-cyber-purple/20 text-cyber-purple border border-cyber-purple/20',
+      blue: 'bg-cyber-dark/60 hover:bg-cyber-blue/20 text-cyber-blue border border-cyber-blue/20',
+      pink: 'bg-cyber-dark/60 hover:bg-cyber-pink/20 text-cyber-pink border border-cyber-pink/20',
+      green: 'bg-cyber-dark/60 hover:bg-cyber-green/20 text-cyber-green border border-cyber-green/20',
     },
     outline: {
-      purple: 'bg-transparent hover:bg-cyber-purple/10 text-cyber-purple border border-cyber-purple',
-      blue: 'bg-transparent hover:bg-cyber-blue/10 text-cyber-blue border border-cyber-blue',
-      pink: 'bg-transparent hover:bg-cyber-pink/10 text-cyber-pink border border-cyber-pink',
-      green: 'bg-transparent hover:bg-cyber-green/10 text-cyber-green border border-cyber-green',
+      purple: 'bg-transparent hover:bg-cyber-purple/10 text-cyber-purple border border-cyber-purple/50',
+      blue: 'bg-transparent hover:bg-cyber-blue/10 text-cyber-blue border border-cyber-blue/50',
+      pink: 'bg-transparent hover:bg-cyber-pink/10 text-cyber-pink border border-cyber-pink/50',
+      green: 'bg-transparent hover:bg-cyber-green/10 text-cyber-green border border-cyber-green/50',
     },
     ghost: {
       purple: 'bg-transparent hover:bg-cyber-purple/10 text-cyber-purple',
@@ -50,29 +50,34 @@ const CyberButton: React.FC<CyberButtonProps> = ({
     },
   };
   
-  // Define glow effects based on color
+  // Enhanced glow effects with reddish-bluish mix
   const glowEffects = {
-    purple: isHovered ? 'shadow-[0_0_15px_rgba(155,135,245,0.5)]' : '',
-    blue: isHovered ? 'shadow-[0_0_15px_rgba(14,165,233,0.5)]' : '',
-    pink: isHovered ? 'shadow-[0_0_15px_rgba(217,70,239,0.5)]' : '',
-    green: isHovered ? 'shadow-[0_0_15px_rgba(16,185,129,0.5)]' : '',
+    purple: isHovered ? 'shadow-[0_0_20px_rgba(155,135,245,0.3),_0_0_8px_rgba(236,72,153,0.25)]' : '',
+    blue: isHovered ? 'shadow-[0_0_20px_rgba(14,165,233,0.3),_0_0_8px_rgba(236,72,153,0.25)]' : '',
+    pink: isHovered ? 'shadow-[0_0_20px_rgba(217,70,239,0.3),_0_0_8px_rgba(59,130,246,0.25)]' : '',
+    green: isHovered ? 'shadow-[0_0_20px_rgba(16,185,129,0.3),_0_0_8px_rgba(59,130,246,0.25)]' : '',
   };
   
-  // Define active press effect
-  const pressEffect = isPressed ? 'transform scale-[0.98]' : '';
+  // More aggressive press effect
+  const pressEffect = isPressed ? 'transform scale-[0.98] brightness-90' : '';
+  
+  // Enhanced border and glow animation
+  const borderAnimationClass = isHovered ? 'led-border-glow' : '';
   
   return (
     <button
       className={cn(
-        'relative px-6 py-3 rounded-md transition-all duration-300',
+        'relative px-6 py-3 rounded-xl transition-all duration-300', // Changed from rounded-md to rounded-xl
         'font-cyber uppercase tracking-wider text-sm',
-        'flex items-center justify-center gap-2',
+        'flex items-center justify-center gap-2 overflow-hidden',
+        'backdrop-blur-sm skew-x-[-3deg] hover:skew-x-0', // Added slight skew for cyberpunk feel
         colorSchemes[variant][glowColor],
         glowEffects[glowColor],
         pressEffect,
+        borderAnimationClass,
         {
           'opacity-70 cursor-wait': isLoading,
-          'hover:translate-y-[-2px]': !isLoading && !isPressed,
+          'hover:translate-y-[-2px] hover:shadow-lg': !isLoading && !isPressed,
         },
         className
       )}
@@ -86,38 +91,52 @@ const CyberButton: React.FC<CyberButtonProps> = ({
       disabled={isLoading || props.disabled}
       {...props}
     >
+      {/* More dynamic loading and icon states */}
       {isLoading ? (
-        <div className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+        <div className="inline-block w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
       ) : icon && (
-        <span className={cn('transition-transform duration-300', { 'transform translate-x-[-3px]': isHovered })}>
+        <span 
+          className={cn(
+            'transition-transform duration-300 opacity-80 group-hover:opacity-100',
+            { 'transform translate-x-[-3px]': isHovered }
+          )}
+        >
           {icon}
         </span>
       )}
       
-      <span className={cn('relative z-10', { 'transform translate-x-[3px]': isHovered && icon })}>
+      <span 
+        className={cn(
+          'relative z-10 transition-transform duration-300',
+          { 'transform translate-x-[3px]': isHovered && icon }
+        )}
+      >
         {children}
       </span>
       
-      {/* Background effects */}
+      {/* Enhanced background gradient effects */}
       <div
         className={cn(
-          'absolute inset-0 rounded-md opacity-0 transition-opacity duration-500',
-          'bg-gradient-to-r',
+          'absolute inset-0 rounded-xl opacity-0 transition-opacity duration-500',
+          'bg-gradient-to-r from-transparent to-transparent',
           {
-            'from-cyber-purple/50 to-cyber-blue/50': glowColor === 'purple',
-            'from-cyber-blue/50 to-cyber-green/50': glowColor === 'blue',
-            'from-cyber-pink/50 to-cyber-purple/50': glowColor === 'pink',
-            'from-cyber-green/50 to-cyber-blue/50': glowColor === 'green',
+            'from-pink-500/30 to-blue-500/30': glowColor === 'purple',
+            'from-blue-500/30 to-cyan-500/30': glowColor === 'blue',
+            'from-pink-500/30 to-purple-500/30': glowColor === 'pink',
+            'from-green-500/30 to-blue-500/30': glowColor === 'green',
           },
-          { 'opacity-20': isHovered && (variant === 'primary' || variant === 'secondary') }
+          { 'opacity-30': isHovered && (variant === 'primary' || variant === 'secondary') }
         )}
       />
       
-      {/* Glitch effect on hover */}
+      {/* More intricate hover and shimmer effects */}
       {isHovered && (
         <>
-          <div className="absolute inset-0 rounded-md bg-white/10 opacity-0 animate-[glitch_0.3s_ease_infinite_alternate]" />
-          <div className="absolute inset-0 rounded-md bg-white/5 opacity-0 animate-[glitch_0.3s_0.1s_ease_infinite_alternate]" />
+          <div className="absolute inset-0 rounded-xl pointer-events-none overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-pink-500/30 to-transparent"></div>
+            <div className="absolute bottom-0 right-0 w-full h-0.5 bg-gradient-to-r from-transparent via-blue-500/30 to-transparent"></div>
+          </div>
+          <div className="shimmer-effect absolute inset-0 pointer-events-none"></div>
         </>
       )}
     </button>

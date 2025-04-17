@@ -250,6 +250,133 @@ class GroqService {
   }
   
   /**
+   * Extract relevant content from HTML to reduce token usage
+   * @param {string} html - HTML content
+   * @param {string} query - Search query
+   * @returns {string} - Relevant HTML content
+   */
+  extractRelevantContent(html, query) {
+    try {
+      // Load HTML with cheerio
+      const $ = cheerio.load(html);
+      
+      // Remove unnecessary elements
+      $('script, style, meta, link, noscript, iframe, svg').remove();
+      
+      // Extract product-related elements
+      const productElements = [];
+      
+      // Common product container selectors
+      const selectors = [
+        // Generic product containers
+        '[class*="product"], [class*="item"], [class*="card"]',
+        // Elements with price
+        '[class*="price"]',
+        // Elements with product in the class name
+        '[class*="product"]',
+        // List items with images and text
+        'li:has(img):has(a)',
+        // Divs with images, text and price-like content
+        'div:has(img):has([class*="price"])',
+        // Amazon specific
+        '[data-component-type="s-search-result"]',
+        // Flipkart specific
+        '._1AtVbE, ._4ddWXP',
+        // Meesho specific
+        '.ProductList__Wrapper, [data-testid="product-container"]'
+      ];
+      
+      // Extract elements matching selectors
+      selectors.forEach(selector => {
+        try {
+          $(selector).each((i, el) => {
+            const text = $(el).text().toLowerCase();
+            // Only include if it might be related to the query
+            if (text.includes(query.toLowerCase())) {
+              productElements.push($(el).html());
+            }
+          });
+        } catch (err) {
+          // Ignore selector errors
+        }
+      });
+      
+      // If no product elements found, return a portion of the body
+      if (productElements.length === 0) {
+        return $('body').html().substring(0, 10000); // Limit to 10K chars
+      }
+      
+      // Join the product elements
+      return productElements.join('\n');
+      
+    } catch (error) {
+      console.error('Error extracting relevant content:', error);
+      // Return a portion of the original HTML if extraction fails
+      return html.substring(0, 10000); // Limit to 10K chars
+    }
+  }
+
+  /**
+   * Enhance web scraping with AI analysis
+   * @param {string} query - Search query
+   * @param {string} html - HTML content
+   * @returns {Promise<Object>} - Enhanced data
+   */
+  async enhanceWebScraping(query, html) {
+    try {
+      console.log(`Enhancing web scraping for query: ${query}`);
+      
+      // Extract relevant content to reduce token usage
+      const relevantContent = this.extractRelevantContent(html, query);
+      
+      // Create a prompt for the AI
+      const prompt = `
+        Extract product information from this HTML content for the search query: "${query}".
+        
+        Return a JSON array of products with these fields:
+        - productName: Full product name
+        - price: Current price with currency symbol
+        - originalPrice: Original price before discount (if available)
+        - discount: Discount percentage (if available)
+        - imageUrl: URL of the product image
+        - url: URL to the product page
+        - rating: Product rating (if available)
+        
+        Only include products that are relevant to the search query.
+        Format your response as valid JSON only.
+        
+        HTML Content:
+        ${relevantContent}
+      `;
+      
+      // Call the Groq API
+      const response = await this.callGroqAPI([
+        { role: 'system', content: 'You are an expert at extracting structured product data from HTML content.' },
+        { role: 'user', content: prompt }
+      ], {
+        temperature: 0.2,
+        max_tokens: 2048
+      });
+      
+      // Extract the enhanced data
+      const enhancedData = response.choices[0].message.content;
+      
+      return {
+        success: true,
+        enhancedData,
+        rawResponse: response
+      };
+    } catch (error) {
+      console.error('Error enhancing web scraping:', error);
+      
+      return {
+        success: false,
+        error: error.message || 'Unknown error occurred during web scraping enhancement'
+      };
+    }
+  }
+  
+  /**
    * Identify a product from an image
    * @param {string} imagePath - Path to image file
    * @returns {Promise<Object>} - Product identification results
@@ -264,16 +391,31 @@ class GroqService {
         };
       }
       
-      // Token-efficient prompt
-      const prompt = `Identify this product. Return JSON with: product name, brand, category, key features (only 2-3), keywords for search.`;
+      // More detailed prompt for better product identification
+      const prompt = `
+        Analyze this product image in detail and identify what it shows.
+        
+        Please provide the following information in JSON format:
+        1. product: The exact product name
+        2. brand: The brand name if visible
+        3. category: Product category (e.g., Electronics, Clothing, etc.)
+        4. features: 2-3 key features visible in the image
+        5. keywords: 5-8 specific search terms that would help find this exact product online
+        6. description: A brief description of what you see (30 words max)
+        
+        Format your response as valid JSON only.
+      `;
+      
+      console.log('Calling Groq Vision API for product identification...');
       
       const response = await this.callGroqVisionAPI(imagePath, prompt, {
-        temperature: 0.2,
-        max_tokens: 1024
+        temperature: 0.3, // Slightly higher temperature for more detailed responses
+        max_tokens: 1500  // Increased token limit for more detailed analysis
       });
       
       // Extract the product data from the response
       const responseText = response.choices[0].message.content;
+      console.log('Raw response from Groq Vision API:', responseText);
       
       try {
         // Try to parse the JSON from the response
@@ -289,6 +431,23 @@ class GroqService {
           productData = JSON.parse(responseText);
         }
         
+        // Ensure we have at least the basic fields
+        if (!productData.product) {
+          productData.product = 'Unknown product';
+        }
+        
+        if (!productData.keywords) {
+          // Generate keywords from product name and category if not provided
+          const keywords = [];
+          if (productData.product) keywords.push(productData.product);
+          if (productData.brand) keywords.push(productData.brand);
+          if (productData.category) keywords.push(productData.category);
+          
+          productData.keywords = keywords.join(', ');
+        }
+        
+        console.log('Successfully parsed product data:', productData);
+        
         return {
           success: true,
           productData,
@@ -296,34 +455,57 @@ class GroqService {
         };
       } catch (parseError) {
         console.error('Error parsing product identification response:', parseError);
+        console.log('Attempting alternative parsing method...');
         
-        // If we can't parse JSON, extract keywords using a simple approach
-        const productMatch = responseText.match(/product[:\s]+"([^"]+)"/i) || 
-                            responseText.match(/product[:\s]+(.+)(?:\n|$)/i);
-                            
-        const keywordsMatch = responseText.match(/keywords[:\s]+"([^"]+)"/i) || 
-                             responseText.match(/keywords[:\s]+(.+)(?:\n|$)/i);
+        // If we can't parse JSON, extract information using regex patterns
+        const extractField = (field) => {
+          const patterns = [
+            new RegExp(`"?${field}"?\\s*:\\s*"([^"]+)"`, 'i'),
+            new RegExp(`"?${field}"?\\s*:\\s*([^,\\n\\}]+)`, 'i'),
+            new RegExp(`${field}[:\\s]+"?([^"\\n]+)"?`, 'i'),
+            new RegExp(`${field}[:\\s]+([^\\n]+)`, 'i')
+          ];
+          
+          for (const pattern of patterns) {
+            const match = responseText.match(pattern);
+            if (match) return match[1].trim();
+          }
+          
+          return null;
+        };
         
-        if (productMatch || keywordsMatch) {
-          return {
-            success: true,
-            productData: {
-              product: productMatch ? productMatch[1].trim() : 'Unknown product',
-              keywords: keywordsMatch ? keywordsMatch[1].trim() : (productMatch ? productMatch[1].trim() : 'Unknown product')
-            },
-            rawResponse: responseText
-          };
-        }
+        // Extract key fields
+        const product = extractField('product') || extractField('name') || 'Unknown product';
+        const brand = extractField('brand') || extractField('manufacturer') || '';
+        const category = extractField('category') || extractField('type') || '';
+        const keywords = extractField('keywords') || extractField('search terms') || product;
+        
+        const productData = {
+          product,
+          brand,
+          category,
+          keywords: keywords || `${product} ${brand} ${category}`.trim()
+        };
+        
+        console.log('Extracted product data using alternative method:', productData);
         
         return {
-          success: false,
-          error: 'Failed to parse product identification data',
-          suggestion: 'The image may not contain a clearly identifiable product. Try uploading a clearer image or specify the product keywords manually.',
+          success: true,
+          productData,
           rawResponse: responseText
         };
       }
     } catch (error) {
       console.error('Error identifying product from image:', error);
+      
+      // Check if it's an API key issue
+      if (error.message && error.message.includes('API key')) {
+        return {
+          success: false,
+          error: 'API key configuration issue. Please check your Groq API key.',
+          suggestion: 'Contact support to verify your API configuration.'
+        };
+      }
       
       return {
         success: false,

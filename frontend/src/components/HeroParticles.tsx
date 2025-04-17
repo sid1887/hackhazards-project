@@ -23,23 +23,23 @@ const HeroParticles = () => {
       color: string;
     }[] = [];
     
+    // Soft blue color palette with lower opacity
     const colors = [
-      'rgba(155, 135, 245, 0.6)', // purple
-      'rgba(14, 165, 233, 0.6)', // blue
-      'rgba(217, 70, 239, 0.6)', // pink
-      'rgba(16, 185, 129, 0.6)', // green
+      'rgba(0, 188, 212, 0.2)', // main blue accent
+      'rgba(59, 130, 246, 0.2)', // soft blue
+      'rgba(0, 150, 199, 0.2)', // another blue tone
     ];
     
     // Create particles
     const createParticles = () => {
-      const particleCount = Math.min(window.innerWidth / 10, 50);
+      const particleCount = Math.min(window.innerWidth / 20, 30); // Reduced particle count
       
       for (let i = 0; i < particleCount; i++) {
-        const size = Math.random() * 3 + 1;
+        const size = Math.random() * 2 + 0.5; // Smaller particles
         const x = Math.random() * canvas.width;
         const y = Math.random() * canvas.height;
-        const speedX = Math.random() * 1 - 0.5;
-        const speedY = Math.random() * 1 - 0.5;
+        const speedX = Math.random() * 0.3 - 0.15; // Slower movement
+        const speedY = Math.random() * 0.3 - 0.15; // Slower movement
         const color = colors[Math.floor(Math.random() * colors.length)];
         
         particlesArray.push({
@@ -50,7 +50,9 @@ const HeroParticles = () => {
     
     // Animate particles
     const animate = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // Semi-transparent clearing for subtle trailing effect
+      ctx.fillStyle = 'rgba(15, 15, 15, 0.2)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
       
       for (let i = 0; i < particlesArray.length; i++) {
         const p = particlesArray[i];
@@ -72,17 +74,17 @@ const HeroParticles = () => {
           p.speedY = -p.speedY;
         }
         
-        // Connect particles with lines
+        // Connect particles with lines - less connections, more subtle
         for (let j = i; j < particlesArray.length; j++) {
           const dx = particlesArray[i].x - particlesArray[j].x;
           const dy = particlesArray[i].y - particlesArray[j].y;
           const distance = Math.sqrt(dx * dx + dy * dy);
           
-          if (distance < 100) {
+          if (distance < 80) { // Reduced connection distance
             ctx.beginPath();
             ctx.strokeStyle = p.color;
-            ctx.globalAlpha = 1 - distance / 100;
-            ctx.lineWidth = 0.5;
+            ctx.globalAlpha = 0.5 - distance / 160; // More subtle lines
+            ctx.lineWidth = 0.3; // Thinner lines
             ctx.moveTo(p.x, p.y);
             ctx.lineTo(particlesArray[j].x, particlesArray[j].y);
             ctx.stroke();
@@ -115,7 +117,7 @@ const HeroParticles = () => {
   return (
     <canvas 
       ref={canvasRef} 
-      className="absolute top-0 left-0 w-full h-[600px] pointer-events-none" 
+      className="absolute top-0 left-0 w-full h-[600px] pointer-events-none opacity-60" 
     />
   );
 };

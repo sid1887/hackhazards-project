@@ -173,11 +173,26 @@ router.post('/details', async (req, res) => {
   try {
     const { product } = req.body;
     
-    if (!product || !product.link || product.link === '#') {
+    if (!product) {
       return res.status(400).json({
         success: false,
-        message: 'Valid product with link is required'
+        message: 'Product object is required'
       });
+    }
+    
+    // Check for either url or link field
+    if ((!product.url || product.url === '#') && (!product.link || product.link === '#')) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid product with URL is required'
+      });
+    }
+    
+    // Ensure product has both url and link fields for compatibility
+    if (!product.url && product.link) {
+      product.url = product.link;
+    } else if (!product.link && product.url) {
+      product.link = product.url;
     }
     
     const detailedProduct = await scraperService.fetchProductDetails(product);

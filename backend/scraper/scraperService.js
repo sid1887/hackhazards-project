@@ -71,9 +71,9 @@ class ScraperService {
         baseUrl: 'https://www.flipkart.com',
         searchUrl: 'https://www.flipkart.com/search?q=',
         selectors: {
-          productContainer: '._1YokD2 ._1AtVbE, ._4ddWXP',
-          productLink: '._1fQZEK, ._2rpwqI, .s1Q9rs',
-          productTitle: '._4rR01T, .s1Q9rs, ._2B099V',
+          productContainer: 'div._1YokD2._3Mn1Gg ._1AtVbE',
+          productLink: 'a._1fQZEK, a.s1Q9rs, a._2rpwqI, a.IRpwTa',
+          productTitle: 'div._4rR01T, a.s1Q9rs, ._2B099V, .IRpwTa',
           productPrice: '._30jeq3, ._1_WHN1',
           productImage: '._396cs4, ._2r_T1I',
           productRating: '._3LWZlK, ._1lRcqv',
@@ -90,17 +90,17 @@ class ScraperService {
         baseUrl: 'https://www.meesho.com',
         searchUrl: 'https://www.meesho.com/search?q=',
         selectors: {
-          productContainer: '.ProductList__Wrapper',
-          productLink: '.ProductList__ImageWrapper a',
-          productTitle: '.Card__Title',
-          productPrice: '.Card__Price',
-          productImage: '.Card__Image',
-          productRating: '.Card__Rating',
-          detailPrice: '.ProdPriceBxCss__FinalPrc',
-          detailTitle: '.PdpMainCss__PrdTitle',
-          detailImage: '.ImageGalleryComponent__BgImg',
-          detailFeatures: '.ProductDesc__Details li, .ProductSpec__SpecsBox',
-          detailSpecs: '.ProductDesc__Details td'
+          productContainer: '.ProductList__Wrapper, div[data-testid="product-container"]',
+          productLink: 'a[data-testid="product-card-link"], a[href*="/product/"]',
+          productTitle: 'h5[data-testid="product-name"], .NewProductCard__Title',
+          productPrice: 'h4[data-testid="product-price"], .NewProductCard__Price',
+          productImage: 'img[data-testid="product-image"], .NewProductCard__Image img',
+          productRating: 'span[data-testid="product-rating"], .NewProductCard__Rating',
+          detailPrice: 'h1[data-testid="product-price"], .ProductDetails__Price',
+          detailTitle: 'h1[data-testid="product-name"], .ProductDetails__Title',
+          detailImage: 'img[data-testid="product-image"], .ImageGalleryComponent__BgImg',
+          detailFeatures: 'div[data-testid="product-details"] li, .ProductDesc__Details li',
+          detailSpecs: 'div[data-testid="product-specs"] td, .ProductDesc__Details td'
         },
         type: 'dynamic'
       },
@@ -109,17 +109,17 @@ class ScraperService {
         baseUrl: 'https://www.croma.com',
         searchUrl: 'https://www.croma.com/searchB?q=',
         selectors: {
-          productContainer: '.product-item',
-          productLink: '.product-title a',
-          productTitle: '.product-title',
-          productPrice: '.pdpPrice',
-          productImage: '.product-img img',
-          productRating: '.rating-value',
-          detailPrice: '.offer-pricing',
-          detailTitle: '.pdp-title',
-          detailImage: '.carousel-item img',
-          detailFeatures: '.highlightLink li',
-          detailSpecs: '.specification-table tr'
+          productContainer: '.product-item, .cp-card, .product-list__item',
+          productLink: '.product-title a, h3 a, .pd-title a',
+          productTitle: '.product-title, h3 a, .pd-title',
+          productPrice: '.pdpPrice, .cp-price, .amount, .new-price',
+          productImage: '.product-img img, .plp-card-image, .pd-image',
+          productRating: '.rating-value, .pr-ratings, .rating',
+          detailPrice: '.offer-pricing, .amount, .pdp-price',
+          detailTitle: '.pdp-title, .pd-heading',
+          detailImage: '.carousel-item img, .pd-img',
+          detailFeatures: '.highlightLink li, .spec-list li, .pd-specs-wrap li',
+          detailSpecs: '.specification-table tr, .pd-specs-table tr'
         },
         type: 'dynamic'
       },
@@ -128,17 +128,17 @@ class ScraperService {
         baseUrl: 'https://www.reliancedigital.in',
         searchUrl: 'https://www.reliancedigital.in/search?q=',
         selectors: {
-          productContainer: '.sp grid',
-          productLink: '.pl__container a',
-          productTitle: '.sp__name',
-          productPrice: '.sp__price',
-          productImage: '.productImg img',
-          productRating: '.SP__ratings',
-          detailPrice: '.pdp__price',
-          detailTitle: '.pdp__title',
-          detailImage: '.pdp__imgCont img',
-          detailFeatures: '.pdp__features li',
-          detailSpecs: '.specification-table tr'
+          productContainer: '.sp.grid, .product-grid, .prod-grid, .pl__container',
+          productLink: '.pl__container a, .prod-name a, .product-name a',
+          productTitle: '.sp__name, .prod-name, .product-name',
+          productPrice: '.sp__price, .prod-price, .product-price, .current-price',
+          productImage: '.productImg img, .prod-img img, .product-image img',
+          productRating: '.SP__ratings, .prod-rating, .rating-stars',
+          detailPrice: '.pdp__price, .prod-sp, .final-price',
+          detailTitle: '.pdp__title, .prod-title, .product-title',
+          detailImage: '.pdp__imgCont img, .prod-img-container img',
+          detailFeatures: '.pdp__features li, .prod-features li',
+          detailSpecs: '.specification-table tr, .prod-specs tr'
         },
         type: 'dynamic'
       }
@@ -534,582 +534,421 @@ class ScraperService {
   }
 
   /**
-   * Scrape a retail website for products based on keywords
+   * Normalize URL to ensure consistency
+   * @param {string} url - Raw URL
+   * @param {string} baseUrl - Base URL for relative links
+   * @returns {string} - Normalized URL
+   */
+  normalizeUrl(url, baseUrl) {
+    if (!url || url === '#') {
+      return '#';
+    }
+    
+    // Already absolute URL
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    }
+    
+    // Relative URL
+    if (baseUrl) {
+      return url.startsWith('/')
+        ? `${baseUrl}${url}`
+        : `${baseUrl}/${url}`;
+    }
+    
+    return url;
+  }
+
+  /**
+   * Parse products from HTML content
+   * @param {string} html - HTML content
+   * @param {Object} retailer - Retailer configuration
    * @param {string} keywords - Search keywords
-   * @returns {Promise<{
-   *   results: Array<{
-   *     title: string,
-   *     price: string,
-   *     link: string,
-   *     image: string,
-   *     retailer: string,
-   *     rating: string,
-   *     delivery: string
-   *   }>},
-   *   count: number,
-   *   retailersAttempted: number,
-   *   retailersSuccessful: number,
-   *   errors: Array<{retailer: string, error: string}>
-   * }>}
+   * @returns {Promise<Array<Object>>} - Array of product objects
+   */
+  async parseProductsFromHTML(html, retailer, keywords) {
+    try {
+      console.log(`Parsing HTML from ${retailer.name}...`);
+      
+      const $ = cheerio.load(html);
+      const products = [];
+      const selectors = retailer.selectors;
+      
+      // Find product containers
+      const productContainers = $(selectors.productContainer);
+      console.log(`Found ${productContainers.length} potential product containers`);
+      
+      if (productContainers.length === 0) {
+        console.log('No product containers found, trying alternative parsing...');
+        return await this.parseProductsAlternative($, retailer, keywords);
+      }
+      
+      // Process each product container
+      productContainers.each((index, container) => {
+        try {
+          // Limit to first 10 products for performance
+          if (index >= 10) return false;
+          
+          const $container = $(container);
+          
+          // Extract product details
+          let name = $container.find(selectors.productTitle).first().text().trim();
+          let price = $container.find(selectors.productPrice).first().text().trim();
+          let imageUrl = $container.find(selectors.productImage).first().attr('src');
+          let rating = $container.find(selectors.productRating).first().text().trim();
+          
+          // Extract link - handle relative URLs using normalizeUrl utility
+          let link = $container.find(selectors.productLink).first().attr('href');
+          link = this.normalizeUrl(link, retailer.baseUrl);
+          
+          // Skip if essential data is missing
+          if (!name || !price) return;
+          
+          // Clean up data
+          name = name.replace(/\\n/g, ' ').replace(/\s+/g, ' ').trim();
+          price = price.replace(/\\n/g, ' ').replace(/\s+/g, ' ').trim();
+          
+          // Extract original price and discount if available
+          let originalPrice = null;
+          let discount = null;
+          
+          // Look for original price near the current price
+          const priceParent = $container.find(selectors.productPrice).first().parent();
+          const originalPriceEl = priceParent.find('.a-text-price, .a-price-strike, ._3I9_wc, ._30jeq3');
+          
+          if (originalPriceEl.length > 0) {
+            originalPrice = originalPriceEl.first().text().trim();
+          }
+          
+          // Look for discount percentage
+          const discountEl = $container.find('.a-badge-text, .a-badge-percentage, ._3Ay6Sb, ._1V_ZGU');
+          if (discountEl.length > 0) {
+            discount = discountEl.first().text().trim();
+            // Ensure discount has % symbol
+            if (discount && !discount.includes('%')) {
+              discount = `${discount}%`;
+            }
+          }
+          
+          // Add product to results with both url and link fields for compatibility
+          products.push({
+            name,
+            price,
+            originalPrice,
+            discount,
+            imageUrl,
+            rating,
+            url: link,
+            link: link,
+            inStock: true // Assume in stock by default
+          });
+          
+        } catch (error) {
+          console.error(`Error parsing product ${index} from ${retailer.name}:`, error);
+        }
+      });
+      
+      console.log(`Successfully parsed ${products.length} products from ${retailer.name}`);
+      return products;
+      
+    } catch (error) {
+      console.error(`Error parsing HTML from ${retailer.name}:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Alternative parsing method when standard selectors fail
+   * @param {Object} $ - Cheerio instance
+   * @param {Object} retailer - Retailer configuration
+   * @param {string} keywords - Search keywords
+   * @returns {Promise<Array<Object>>} - Array of product objects
+   */
+  async parseProductsAlternative($, retailer, keywords) {
+    try {
+      console.log(`Using alternative parsing for ${retailer.name}...`);
+      
+      const products = [];
+      
+      // Look for common product patterns
+      const productPatterns = [
+        // Look for elements with price and image
+        'div:has(img):has(a):has(.price, [class*="price"], [class*="Price"])',
+        // Look for card-like elements
+        '.card, .product-card, .item, [class*="product-"], [class*="item-"]',
+        // Look for elements with links and prices
+        'a:has(img):has([class*="price"], [class*="Price"])',
+        // Amazon specific
+        '[data-component-type="s-search-result"]',
+        // Flipkart specific
+        '._1AtVbE, ._4ddWXP',
+        // Generic product containers
+        '[class*="product-container"], [class*="search-result"]'
+      ];
+      
+      // Try each pattern until we find products
+      for (const pattern of productPatterns) {
+        const elements = $(pattern);
+        console.log(`Found ${elements.length} elements matching pattern: ${pattern}`);
+        
+        if (elements.length > 0) {
+          elements.each((index, element) => {
+            try {
+              // Limit to first 10 products
+              if (index >= 10) return false;
+              
+              // Look for elements with price-like content
+              const priceRegex = /(?:₹|Rs\.?|INR)\s*\d+([.,]\d+)?/i;
+              const text = $(element).text();
+              
+              if (priceRegex.test(text)) {
+                // Found a potential product
+                const title = $(element).find('h3, h2, .title, .product-title').text().trim()
+                  || $(element).find('a[title]').attr('title')
+                  || '';
+                  
+                if (!title) return;
+                
+                const priceMatch = text.match(priceRegex);
+                const price = priceMatch ? priceMatch[0].trim() : '';
+                let link = $(element).find('a').attr('href') || '#';
+                // Normalize URL
+                link = this.normalizeUrl(link, retailer.baseUrl);
+                const image = $(element).find('img').attr('src') || '';
+                
+                products.push({
+                  name: title,
+                  price: price,
+                  imageUrl: image,
+                  // Store both url and link fields for compatibility
+                  url: link,
+                  link: link,
+                  rating: 'N/A',
+                  inStock: true
+                });
+              }
+            } catch (error) {
+              console.error(`Error in alternative parsing for element ${index}:`, error);
+            }
+          });
+          
+          // If we found products, return them
+          if (products.length > 0) {
+            console.log(`Found ${products.length} products using alternative parsing`);
+            return products;
+          }
+        }
+      }
+      
+      return products;
+    } catch (error) {
+      console.error(`Error in alternative parsing for ${retailer.name}:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Scrape products by keywords across multiple retailers
+   * @param {string} keywords - Search keywords
+   * @returns {Promise<{data: Array<Object>, count: number, query: string}>} - Product search results
    */
   async scrapeProductsByKeywords(keywords) {
     console.log(`Scraping products for keywords: ${keywords}`);
     
-    const normalizedKeywords = encodeURIComponent(keywords.trim());
-    const results = [];
-    const errors = [];
-    let retailersAttempted = 0;
-    let retailersSuccessful = 0;
+    // Encode keywords for URL
+    const encodedKeywords = encodeURIComponent(keywords);
     
-    // Process retailers sequentially to avoid overwhelming the system
-    // This can help prevent detection and improve stability
-    for (const retailer of Object.values(this.retailers)) {
+    // Results container
+    const allProducts = [];
+    const scrapedRetailers = [];
+    const failedRetailers = [];
+    
+    // For each retailer, create a promise that resolves with products
+    const retailerPromises = Object.values(this.retailers).map(async (retailer) => {
       try {
-        retailersAttempted++;
-        const searchUrl = `${retailer.searchUrl}${normalizedKeywords}`;
-        console.log(`Scraping ${retailer.name} with URL: ${searchUrl}`);
+        console.log(`Scraping from ${retailer.name}...`);
+        const searchUrl = `${retailer.searchUrl}${encodedKeywords}`;
         
-        // Add a small delay between retailers to avoid detection
-        if (retailersAttempted > 1) {
-          await this.randomDelay(1000, 3000);
-        }
-        
-        // Choose scraping method based on retailer type
-        let scrapingResult;
+        // Object to store scraping result
+        let scrapingResult = { success: false, error: null, html: null };
         let scrapingMethod = '';
         
-        switch (retailer.type) {
-          case 'dynamic':
-            // Try Playwright first - no proxy
-            try {
-              scrapingResult = await this.scrapeWithPlaywright(searchUrl, false);
-              scrapingMethod = 'Playwright';
-            } catch (playwrightError) {
-              console.error(`Playwright error for ${retailer.name}:`, playwrightError);
-              scrapingResult = { success: false, error: playwrightError.message };
-            }
-            
-            // If Playwright fails, fall back to Puppeteer - no proxy
-            if (!scrapingResult.success) {
-              console.log(`Playwright failed for ${retailer.name}, trying Puppeteer...`);
-              try {
-                scrapingResult = await this.scrapeWithPuppeteer(searchUrl, false);
-                scrapingMethod = 'Puppeteer';
-              } catch (puppeteerError) {
-                console.error(`Puppeteer error for ${retailer.name}:`, puppeteerError);
-                scrapingResult = { success: false, error: puppeteerError.message };
-              }
-            }
-            
-            // If both fail, try direct request without proxy
-            if (!scrapingResult.success) {
-              console.log(`Puppeteer failed for ${retailer.name}, trying direct request...`);
-              try {
-                const directResult = await this.makeRequest(searchUrl, false, false);
-                scrapingResult = { html: directResult.data, success: directResult.success, error: directResult.error };
-                scrapingMethod = 'Direct Request';
-              } catch (requestError) {
-                console.error(`Direct request error for ${retailer.name}:`, requestError);
-                scrapingResult = { success: false, error: requestError.message };
-              }
-            }
-            break;
-            
-          case 'static':
-          default:
-            // For static sites, a simple direct request should work
-            try {
-              const requestResult = await this.makeRequest(searchUrl, false, false);
-              scrapingResult = { html: requestResult.data, success: requestResult.success, error: requestResult.error };
-              scrapingMethod = 'Direct Request';
-            } catch (requestError) {
-              console.error(`Direct request error for ${retailer.name}:`, requestError);
-              scrapingResult = { success: false, error: requestError.message };
-            }
-            break;
-        }
-        
-        if (!scrapingResult.success) {
-          throw new Error(scrapingResult.error || `Unknown error during scraping with ${scrapingMethod}`);
-        }
-        
-        // Parse the HTML to extract product data
-        let productData = [];
+        // First try with Playwright - most modern approach
         try {
-          productData = await this.parseProductListHtml(scrapingResult.html, retailer);
-          console.log(`Parsing found ${productData.length} products from ${retailer.name}`);
-        } catch (parseError) {
-          console.error(`Error parsing HTML for ${retailer.name}:`, parseError);
-          throw new Error(`HTML parsing error: ${parseError.message}`);
+          scrapingResult = await this.scrapeWithPlaywright(searchUrl, false);
+          scrapingMethod = 'Playwright';
+        } catch (playwrightError) {
+          console.error(`Playwright error for ${retailer.name}:`, playwrightError);
+          scrapingResult = { success: false, error: playwrightError.message };
         }
         
-        if (productData.length > 0) {
-          console.log(`Successfully scraped ${productData.length} products from ${retailer.name}`);
-          retailersSuccessful++;
+        // If Playwright fails, try Puppeteer
+        if (!scrapingResult.success) {
+          console.log(`Playwright failed for ${retailer.name}, trying Puppeteer...`);
+          try {
+            scrapingResult = await this.scrapeWithPuppeteer(searchUrl, false);
+            scrapingMethod = 'Puppeteer';
+          } catch (puppeteerError) {
+            console.error(`Puppeteer error for ${retailer.name}:`, puppeteerError);
+            scrapingResult = { success: false, error: puppeteerError.message };
+          }
+        }
+        
+        // If both fail, try direct request
+        if (!scrapingResult.success) {
+          console.log(`Both browser methods failed for ${retailer.name}, trying direct request...`);
+          try {
+            const requestResult = await this.makeRequest(searchUrl, false, false);
+            scrapingResult = { html: requestResult.data, success: requestResult.success, error: requestResult.error };
+            scrapingMethod = 'Direct Request';
+          } catch (requestError) {
+            console.error(`Direct request error for ${retailer.name}:`, requestError);
+            scrapingResult = { success: false, error: requestError.message };
+          }
+        }
+        
+        // If we got HTML content, parse it
+        if (scrapingResult.success && scrapingResult.html) {
+          console.log(`Successfully scraped HTML from ${retailer.name}, parsing products...`);
           
-          // Add retailer info to each product
-          productData.forEach(product => {
-            product.retailer = retailer.name;
-            product.retailerBaseUrl = retailer.baseUrl;
-            product.scrapingMethod = scrapingMethod;
+          // Parse HTML to extract products
+          const products = await this.parseProductsFromHTML(scrapingResult.html, retailer, keywords);
+          
+          if (products && products.length > 0) {
+            console.log(`Successfully parsed ${products.length} products from ${retailer.name}`);
             
-            // Make sure links are absolute
-            if (product.link && !product.link.startsWith('http')) {
-              product.link = retailer.baseUrl + (product.link.startsWith('/') ? product.link : `/${product.link}`);
-            }
+            // Add retailer info and ensure URL consistency
+            const productsWithRetailer = products.map(product => {
+              // Ensure URLs are absolute
+              const productUrl = this.normalizeUrl(product.url || product.link, retailer.baseUrl);
+              
+              return {
+                ...product,
+                retailer: retailer.name,
+                vendor: retailer.name,
+                vendorLogo: this.getRetailerLogo(retailer.name),
+                id: `${retailer.name.toLowerCase()}-${Math.random().toString(36).substring(2, 10)}`,
+                // Ensure both url and link fields exist for compatibility
+                url: productUrl,
+                link: productUrl
+              };
+            });
             
-            results.push(product);
-          });
+            // Add to all products array
+            allProducts.push(...productsWithRetailer);
+            scrapedRetailers.push(retailer.name);
+          } else {
+            console.log(`No products found from ${retailer.name}`);
+            failedRetailers.push(retailer.name);
+          }
         } else {
-          console.log(`No products found on ${retailer.name}`);
-          errors.push({
-            retailer: retailer.name,
-            error: 'No products found in the search results',
-            scrapingMethod
-          });
+          console.error(`Failed to scrape from ${retailer.name}: ${scrapingResult.error || 'Unknown error'}`);
+          failedRetailers.push(retailer.name);
         }
       } catch (error) {
-        console.error(`Error scraping ${retailer.name}:`, error);
-        errors.push({
-          retailer: retailer.name,
-          error: error.message || 'Unknown error'
-        });
+        console.error(`Error scraping from ${retailer.name}:`, error);
+        failedRetailers.push(retailer.name);
       }
-    }
+    });
     
-    // If traditional scraping failed completely, try AI-based extraction
-    if (results.length === 0 && retailersSuccessful === 0) {
-      console.log('Traditional scraping failed. Attempting AI-based extraction...');
-      try {
-        const aiResults = await this.performAIBasedExtraction(keywords);
-        if (aiResults.length > 0) {
-          console.log(`AI-based extraction found ${aiResults.length} products`);
-          results.push(...aiResults);
-        } else {
-          console.log('AI-based extraction found no products');
-        }
-      } catch (aiError) {
-        console.error('Error during AI-based extraction:', aiError);
-      }
-    }
+    // Wait for all retailer scraping to complete
+    await Promise.all(retailerPromises);
     
-    // Sort by price (low to high)
-    results.sort((a, b) => {
+    console.log(`Scraping complete. Found ${allProducts.length} products from ${scrapedRetailers.length} retailers.`);
+    console.log(`Failed retailers: ${failedRetailers.join(', ')}`);
+    
+    // Return standardized results
+    const processedProducts = this.processProductResults(allProducts, keywords);
+    
+    return {
+      data: processedProducts,
+      count: processedProducts.length,
+      query: keywords,
+      scrapedRetailers,
+      failedRetailers
+    };
+  }
+
+  /**
+   * Search for products across all retailers
+   * @param {string} query - Search query
+   * @returns {Promise<Array<Object>>} - Array of product objects
+   */
+  async searchProduct(query) {
+    try {
+      console.log(`Searching for products matching: ${query}`);
+      const results = await this.scrapeProductsByKeywords(query);
+      
+      // Process results through our standardization method
+      const processedProducts = this.processProductResults(results.data || [], query);
+      
+      return processedProducts;
+    } catch (error) {
+      console.error('Error in searchProduct:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Process and enhance product results
+   * @param {Array<Object>} products - Raw product data
+   * @param {string} keywords - Search keywords
+   * @returns {Array<Object>} - Processed products
+   */
+  processProductResults(products, keywords) {
+    // Filter out duplicates and invalid products
+    const validProducts = products.filter(p => 
+      p && (p.name || p.title) && p.price && 
+      (p.imageUrl || p.image) && 
+      (p.url || p.link)
+    );
+    
+    // Standardize product fields
+    const standardizedProducts = validProducts.map(product => {
+      // Ensure consistency in field naming for URLs
+      const productUrl = product.url || product.link || '#';
+      
+      return {
+        id: product.id || `product-${Math.random().toString(36).substring(2, 10)}`,
+        name: product.name || product.title || 'Unknown Product',
+        price: product.price || 'Check on site',
+        originalPrice: product.originalPrice || product.oldPrice || null,
+        discount: product.discount || null,
+        vendor: product.vendor || product.retailer || 'Unknown',
+        vendorLogo: product.vendorLogo || this.getRetailerLogo(product.vendor || product.retailer || ''),
+        rating: product.rating || null,
+        inStock: product.inStock !== undefined ? product.inStock : true,
+        imageUrl: product.imageUrl || product.image || 'https://via.placeholder.com/300x300?text=No+Image',
+        // Store both url and link fields for compatibility
+        url: productUrl,
+        link: productUrl
+      };
+    });
+    
+    // Sort by price (lowest first)
+    const sortedProducts = [...standardizedProducts].sort((a, b) => {
       const priceA = this.extractNumericPrice(a.price);
       const priceB = this.extractNumericPrice(b.price);
       return priceA - priceB;
     });
     
-    console.log(`Scraping complete. Found ${results.length} products from ${retailersSuccessful} retailers.`);
+    return sortedProducts;
+  }
+  
+  /**
+   * Extract numeric price value from price string
+   * @param {string} priceString - Price string (e.g., "₹1,499", "Rs.2000")
+   * @returns {number} - Numeric price value
+   */
+  extractNumericPrice(priceString) {
+    if (!priceString || typeof priceString !== 'string') return 99999999;
     
-    return {
-      results,
-      count: results.length,
-      retailersAttempted,
-      retailersSuccessful,
-      errors: errors.length > 0 ? errors : undefined
-    };
-  }
-
-  /**
-   * Extract numeric price from price string
-   * @param {string} priceStr - Price string
-   * @returns {number} - Numeric price
-   */
-  extractNumericPrice(priceStr) {
-    if (!priceStr) return Infinity;
+    // Extract only numbers from the price string
+    const matches = priceString.match(/[0-9,]+(\.[0-9]+)?/);
+    if (!matches || !matches[0]) return 99999999;
     
-    // Remove currency symbols, commas, spaces, etc., and extract numbers
-    const matches = priceStr.replace(/[^\d.]/g, '').match(/\d+(\.\d+)?/);
-    return matches ? parseFloat(matches[0]) : Infinity;
-  }
-
-  /**
-   * Parse HTML from a product listing page
-   * @param {string} html - HTML content
-   * @param {Object} retailer - Retailer configuration
-   * @returns {Promise<Array<Object>>} - Array of product objects
-   */
-  async parseProductListHtml(html, retailer) {
-    try {
-      const $ = cheerio.load(html);
-      const products = [];
-      const selectors = retailer.selectors;
-      
-      // Debug: Log the HTML structure to help diagnose issues
-      // console.log(`HTML structure for ${retailer.name}:`, $.html().substring(0, 500) + '...');
-      
-      // First try: Use retailer-specific selectors to extract product data
-      $(selectors.productContainer).each((i, element) => {
-        // Skip if we have enough products
-        if (i >= 20) return false;
-        
-        try {
-          // Extract product details
-          const titleElement = $(element).find(selectors.productTitle);
-          const priceElement = $(element).find(selectors.productPrice);
-          const linkElement = $(element).find(selectors.productLink);
-          const imageElement = $(element).find(selectors.productImage);
-          const ratingElement = $(element).find(selectors.productRating);
-          
-          let title = titleElement.text().trim();
-          
-          // If no text found, try getting title from attributes
-          if (!title) {
-            title = titleElement.attr('title') || titleElement.attr('alt') || '';
-          }
-          
-          // Skip if no title (likely not a product)
-          if (!title) return;
-          
-          let price = priceElement.text().trim();
-          let link = linkElement.attr('href') || '#';
-          let image = imageElement.attr('src') || imageElement.attr('data-src') || '';
-          let rating = ratingElement.text().trim();
-          
-          // Handle relative URLs
-          if (link && link !== '#' && !link.startsWith('http')) {
-            link = retailer.baseUrl + (link.startsWith('/') ? link : `/${link}`);
-          }
-          
-          // Handle lazy-loaded images
-          if (!image) {
-            image = imageElement.attr('data-src') || imageElement.attr('data-lazy-src') || imageElement.attr('data-original') || '';
-          }
-          
-          products.push({
-            title,
-            price: price || 'Check on site',
-            link,
-            image,
-            rating: rating || 'N/A',
-            retailer: retailer.name,
-            delivery: 'Check website for details'
-          });
-        } catch (itemError) {
-          console.error(`Error parsing product item for ${retailer.name}:`, itemError);
-          // Continue with next item
-        }
-      });
-      
-      // Second try: If standard parsing failed, try alternative selectors
-      if (products.length === 0) {
-        console.log(`No products found with primary selectors for ${retailer.name}, trying alternative selectors...`);
-        this.parseWithAlternativeSelectors($, retailer, products);
-      }
-      
-      // Third try: If still no products, try a very generic approach
-      if (products.length === 0) {
-        console.log(`No products found with alternative selectors for ${retailer.name}, trying generic approach...`);
-        
-        // Look for any elements that might contain product information
-        $('a[href*="product"], a[href*="/p/"], div[class*="product"], div[class*="item"]').each((i, element) => {
-          if (products.length >= 20) return false;
-          
-          try {
-            const link = $(element).attr('href') || $(element).find('a').attr('href') || '#';
-            let title = $(element).attr('title') || $(element).text().trim();
-            
-            // Try to find title in nearby elements if not found
-            if (!title || title.length < 3) {
-              title = $(element).find('h2, h3, [class*="title"], [class*="name"]').text().trim();
-            }
-            
-            // Skip if no valid title
-            if (!title || title.length < 3) {
-              return; // This is the correct way to 'continue' in jQuery each
-            }
-            
-            // Look for price patterns in text
-            const allText = $(element).text();
-            const priceMatch = allText.match(/(?:₹|Rs\.?|INR)\s*[\d,]+(\.\d+)?/i);
-            const price = priceMatch ? priceMatch[0].trim() : 'Check on site';
-            
-            // Try to find an image
-            const image = $(element).find('img').attr('src') || 
-                         $(element).find('img').attr('data-src') || 
-                         '';
-            
-            products.push({
-              title: title.substring(0, 100), // Limit title length
-              price,
-              link,
-              image,
-              rating: 'N/A',
-              retailer: retailer.name,
-              delivery: 'Check website for details',
-              note: 'Found with generic selectors'
-            });
-          } catch (genericError) {
-            // Ignore errors in generic parsing
-          }
-        });
-      }
-      
-      return products;
-    } catch (error) {
-      console.error(`Error parsing HTML for ${retailer.name}:`, error);
-      return [];
-    }
-  }
-
-  /**
-   * Parse HTML with alternative selectors if standard ones fail
-   * @param {CheerioStatic} $ - Cheerio instance
-   * @param {Object} retailer - Retailer configuration
-   * @param {Array<Object>} products - Products array to append to
-   */
-  parseWithAlternativeSelectors($, retailer, products) {
-    // Try common alternative selectors based on the retailer
-    switch (retailer.name) {
-      case 'Amazon':
-        // Try multiple selector patterns for Amazon
-        // First try standard search results
-        $('div.s-result-item, div[data-component-type="s-search-result"], div.sg-col-4-of-24').each((i, element) => {
-          if (i >= 20) return false;
-          
-          const title = $(element).find('h2, .a-size-medium, .a-size-base-plus').text().trim();
-          if (!title) return;
-          
-          // Try multiple price selectors
-          let price = '';
-          const priceWhole = $(element).find('.a-price-whole').text().trim();
-          const priceOffscreen = $(element).find('.a-price .a-offscreen').text().trim();
-          const priceSymbol = $(element).find('.a-price-symbol').text().trim();
-          
-          if (priceOffscreen) {
-            price = priceOffscreen;
-          } else if (priceWhole) {
-            price = priceSymbol ? `${priceSymbol}${priceWhole}` : `₹${priceWhole}`;
-          }
-          
-          // Try multiple link selectors
-          const link = $(element).find('a.a-link-normal[href*="/dp/"], a[href*="/gp/product/"]').attr('href') || 
-                      $(element).find('h2 a, .a-size-medium a').attr('href') || '#';
-                      
-          // Try multiple image selectors
-          const image = $(element).find('img.s-image, img[data-image-latency="s-product-image"]').attr('src') || 
-                       $(element).find('img').attr('src') || '';
-          
-          // Try to find rating
-          const ratingText = $(element).find('.a-icon-star-small, .a-icon-star').text().trim();
-          const ratingAlt = $(element).find('.a-icon-alt').text().trim();
-          const rating = ratingAlt || ratingText || 'N/A';
-          
-          products.push({
-            title,
-            price: price || 'Check on site',
-            link,
-            image,
-            rating,
-            retailer: retailer.name,
-            delivery: 'Check website for details'
-          });
-        });
-        
-        // If no products found, try a more generic approach
-        if (products.length === 0) {
-          $('a[href*="/dp/"], a[href*="/gp/product/"]').each((i, element) => {
-            if (i >= 20) return false;
-            
-            const link = $(element).attr('href') || '#';
-            // Skip if not a product link
-            if (!link.includes('/dp/') && !link.includes('/gp/product/')) return;
-            
-            const parentDiv = $(element).closest('div');
-            const title = $(element).attr('title') || parentDiv.find('h2, .a-text-normal').text().trim();
-            if (!title) return;
-            
-            // Look for price near this element
-            const price = parentDiv.find('.a-price, .a-color-price').text().trim();
-            const image = parentDiv.find('img').attr('src') || '';
-            
-            products.push({
-              title,
-              price: price || 'Check on site',
-              link,
-              image,
-              rating: 'N/A',
-              retailer: retailer.name,
-              delivery: 'Check website for details'
-            });
-          });
-        }
-        break;
-        
-      case 'Flipkart':
-        // Try multiple selector patterns for Flipkart
-        // First try product grid items
-        $('div._1YokD2 ._1AtVbE, ._4ddWXP, ._3pLy-c, div[data-id]').each((i, element) => {
-          if (i >= 20) return false;
-          
-          const title = $(element).find('div._4rR01T, a.s1Q9rs, ._2B099V, .IRpwTa').text().trim();
-          if (!title) return;
-          
-          const price = $(element).find('div._30jeq3, ._1_WHN1').text().trim();
-          const link = $(element).find('a._1fQZEK, a.s1Q9rs, a._2rpwqI, a.IRpwTa').attr('href') || '#';
-          const image = $(element).find('img._396cs4, img._2r_T1I').attr('src') || '';
-          const rating = $(element).find('._3LWZlK, ._1lRcqv').text().trim();
-          
-          products.push({
-            title,
-            price,
-            link,
-            image,
-            rating: rating || 'N/A',
-            retailer: retailer.name,
-            delivery: 'Check website for details'
-          });
-        });
-        
-        // If no products found, try a more generic approach
-        if (products.length === 0) {
-          $('a[href*="/p/"]').each((i, element) => {
-            if (i >= 20) return false;
-            
-            const link = $(element).attr('href') || '#';
-            // Skip if not a product link
-            if (!link.includes('/p/')) return;
-            
-            const title = $(element).attr('title') || $(element).text().trim();
-            if (!title) return;
-            
-            // Look for price near this element
-            const parentDiv = $(element).closest('div');
-            const price = parentDiv.find('div[class*="price"], span[class*="price"], ._30jeq3, ._1_WHN1').text().trim();
-            const image = parentDiv.find('img').attr('src') || '';
-            
-            products.push({
-              title,
-              price: price || 'Check on site',
-              link,
-              image,
-              rating: 'N/A',
-              retailer: retailer.name,
-              delivery: 'Check website for details'
-            });
-          });
-        }
-        break;
-        
-      // Add more retailers as needed
-      default:
-        // Generic attempt to find products
-        $('div, li').each((i, element) => {
-          if (i >= 100) return false; // Check more elements for generic approach
-          
-          // Look for elements with price-like content
-          const priceRegex = /(?:₹|Rs\.?|INR)\s*\d+([.,]\d+)?/i;
-          const text = $(element).text();
-          
-          if (priceRegex.test(text)) {
-            // Found a potential product
-            const title = $(element).find('h3, h2, .title, .product-title').text().trim()
-              || $(element).find('a[title]').attr('title')
-              || '';
-              
-            if (!title) return;
-            
-            const priceMatch = text.match(priceRegex);
-            const price = priceMatch ? priceMatch[0].trim() : '';
-            const link = $(element).find('a').attr('href') || '#';
-            const image = $(element).find('img').attr('src') || '';
-            
-            products.push({
-              title,
-              price,
-              link,
-              image,
-              rating: 'N/A',
-              retailer: retailer.name,
-              delivery: 'Check website for details'
-            });
-          }
-        });
-        break;
-    }
-  }
-
-  /**
-   * Perform AI-based extraction when traditional scraping fails
-   * @param {string} keywords - Search keywords
-   * @returns {Promise<Array<Object>>} - Array of product objects
-   */
-  async performAIBasedExtraction(keywords) {
-    try {
-      console.log('Attempting AI-based product extraction...');
-      
-      // Choose a few major retailers to try
-      const majorRetailers = ['Amazon', 'Flipkart'];
-      const results = [];
-      
-      for (const retailerName of majorRetailers) {
-        const retailer = Object.values(this.retailers).find(r => r.name === retailerName);
-        if (!retailer) continue;
-        
-        const searchUrl = `${retailer.searchUrl}${encodeURIComponent(keywords.trim())}`;
-        
-        try {
-          // Use a direct request with minimal headers
-          const response = await axios.get(searchUrl, {
-            headers: {
-              'User-Agent': this.getRandomUserAgent(),
-              'Accept': 'text/html'
-            },
-            timeout: 30000
-          });
-          
-          // Use Groq API to extract product information from HTML
-          const extractionResult = await groqService.enhanceWebScraping(keywords, response.data);
-          
-          if (extractionResult.success) {
-            // Parse the AI-extracted data
-            let aiProducts = [];
-            try {
-              // Try to parse as JSON
-              const jsonMatch = extractionResult.enhancedData.match(/```(?:json)?\n([\s\S]*?)\n```/) || 
-                             extractionResult.enhancedData.match(/{[\s\S]*?}/);
-                             
-              if (jsonMatch) {
-                aiProducts = JSON.parse(jsonMatch[1] || jsonMatch[0]);
-              } else {
-                aiProducts = JSON.parse(extractionResult.enhancedData);
-              }
-              
-              // Normalize the data structure
-              if (!Array.isArray(aiProducts)) {
-                aiProducts = [aiProducts];
-              }
-              
-              // Transform AI format to our standard format
-              aiProducts.forEach(product => {
-                results.push({
-                  title: product.productName || product.title || 'Unknown Product',
-                  price: product.currentPrice || product.price || 'Check on site',
-                  link: product.url || '#',
-                  image: product.imageUrl || '',
-                  rating: product.rating || 'N/A',
-                  retailer: retailerName,
-                  delivery: 'Check website for details',
-                  aiExtracted: true
-                });
-              });
-              
-              console.log(`Successfully extracted ${aiProducts.length} products from ${retailerName} using AI`);
-            } catch (parseError) {
-              console.error('Error parsing AI extraction result:', parseError);
-            }
-          }
-        } catch (error) {
-          console.error(`Error during AI extraction for ${retailerName}:`, error);
-        }
-      }
-      
-      return results;
-    } catch (error) {
-      console.error('Error in AI-based extraction:', error);
-      return [];
-    }
+    // Convert to number, removing commas
+    return parseFloat(matches[0].replace(/,/g, '')) || 99999999;
   }
 
   /**
@@ -1119,81 +958,41 @@ class ScraperService {
    */
   async fetchProductDetails(product) {
     try {
-      if (!product.link || product.link === '#') {
-        throw new Error('Invalid product link');
+      // Ensure we have a valid URL to fetch details from
+      const productUrl = product.url || product.link;
+      if (!productUrl || productUrl === '#') {
+        throw new Error('Invalid product URL');
       }
       
       // Determine which retailer this product is from
-      const retailerName = product.retailer;
+      const retailerName = product.vendor || product.retailer;
       const retailer = Object.values(this.retailers).find(r => r.name === retailerName);
       
       if (!retailer) {
-        throw new Error('Unknown retailer');
-      }
-      
-      console.log(`Fetching details for product from ${retailerName}: ${product.title}`);
-      
-      // Scrape the product page
-      const scrapingResult = await this.scrapeWithPlaywright(product.link, false);
-      
-      if (!scrapingResult.success) {
-        // Try fallback method
-        const fallbackResult = await this.scrapeWithPuppeteer(product.link, false);
+        console.log(`Unknown retailer: ${retailerName}, using generic selectors`);
+        // Create a generic retailer configuration based on the product URL
+        const urlObj = new URL(productUrl);
+        const hostname = urlObj.hostname;
+        const baseUrl = `${urlObj.protocol}//${hostname}`;
         
-        if (!fallbackResult.success) {
-          throw new Error('Failed to scrape product details page');
-        }
+        const genericRetailer = {
+          name: retailerName || hostname,
+          baseUrl: baseUrl,
+          selectors: {
+            detailPrice: '.price, [class*="price"], [class*="Price"], .offer-price, .pdp-price',
+            detailTitle: 'h1, .product-title, .pdp-title, [class*="title"], [class*="name"]',
+            detailImage: '.product-image img, .pdp-image img, [class*="product"] img, [class*="main-image"]',
+            detailFeatures: '.features li, .specifications li, .product-details li, [class*="feature"] li, [class*="detail"] li',
+            detailSpecs: '.specifications tr, .specs tr, .table tr, [class*="spec"] tr, table tr'
+          }
+        };
         
-        scrapingResult.html = fallbackResult.html;
-        scrapingResult.success = true;
+        return await this.scrapeProductDetailsWithRetailer(productUrl, genericRetailer, product);
       }
       
-      // Parse the product details
-      const $ = cheerio.load(scrapingResult.html);
-      const selectors = retailer.selectors;
+      console.log(`Fetching details for product from ${retailerName}: ${product.name || product.title}`);
+      return await this.scrapeProductDetailsWithRetailer(productUrl, retailer, product);
       
-      // Extract product details
-      const detailPrice = $(selectors.detailPrice).first().text().trim() || product.price;
-      const detailTitle = $(selectors.detailTitle).first().text().trim() || product.title;
-      const detailImage = $(selectors.detailImage).first().attr('src') || product.image;
-      
-      // Extract features
-      const features = [];
-      $(selectors.detailFeatures).each((i, element) => {
-        const feature = $(element).text().trim();
-        if (feature) features.push(feature);
-      });
-      
-      // Extract specifications
-      const specifications = {};
-      $(selectors.detailSpecs).each((i, element) => {
-        if (i % 2 === 0) {
-          const key = $(element).text().trim();
-          const value = $(selectors.detailSpecs).eq(i + 1).text().trim();
-          if (key && value) specifications[key] = value;
-        }
-      });
-      
-      // Check if we got meaningful data
-      if (!detailTitle && !detailPrice && features.length === 0 && Object.keys(specifications).length === 0) {
-        // If traditional parsing failed, use AI to extract details
-        return await this.extractDetailsWithAI(product, scrapingResult.html);
-      }
-      
-      // Return the detailed product information
-      return {
-        title: detailTitle,
-        price: detailPrice,
-        link: product.link,
-        image: detailImage,
-        retailer: retailerName,
-        rating: product.rating || 'N/A',
-        delivery: product.delivery || 'Check website for details',
-        features,
-        specifications,
-        description: features.join('. '),
-        inStock: true // Assume in stock by default
-      };
     } catch (error) {
       console.error('Error fetching product details:', error);
       
@@ -1207,219 +1006,669 @@ class ScraperService {
   }
 
   /**
-   * Extract product details using AI when traditional parsing fails
-   * @param {Object} product - Basic product information
-   * @param {string} html - HTML content of product page
+   * Scrape product details with specific retailer configuration
+   * @param {string} url - Product URL
+   * @param {Object} retailer - Retailer configuration
+   * @param {Object} originalProduct - Original product data
    * @returns {Promise<Object>} - Detailed product information
    */
-  async extractDetailsWithAI(product, html) {
+  async scrapeProductDetailsWithRetailer(url, retailer, originalProduct) {
+    // First try with Playwright - best for dynamic content
+    let scrapingResult = { success: false };
+    
     try {
-      console.log(`Using AI to extract details for ${product.title}`);
-      
-      // Use Groq to extract detailed information
-      const extractionResult = await groqService.enhanceWebScraping(product.title, html);
-      
-      if (!extractionResult.success) {
-        throw new Error('AI extraction failed');
-      }
-      
-      // Parse the AI extraction result
-      let detailedProduct = {};
+      scrapingResult = await this.scrapeWithPlaywright(url, false);
+    } catch (playwrightError) {
+      console.log(`Playwright error fetching ${url}: ${playwrightError.message}`);
+    }
+    
+    // If Playwright fails, try Puppeteer
+    if (!scrapingResult.success) {
       try {
-        // Try to parse as JSON
-        const jsonMatch = extractionResult.enhancedData.match(/```(?:json)?\n([\s\S]*?)\n```/) || 
-                       extractionResult.enhancedData.match(/{[\s\S]*?}/);
-                       
-        if (jsonMatch) {
-          detailedProduct = JSON.parse(jsonMatch[1] || jsonMatch[0]);
-        } else {
-          detailedProduct = JSON.parse(extractionResult.enhancedData);
-        }
-        
-        // Combine original product data with AI-extracted data
-        return {
-          title: detailedProduct.productName || product.title,
-          price: detailedProduct.currentPrice || product.price,
-          originalPrice: detailedProduct.originalPrice,
-          discount: detailedProduct.discount,
-          link: product.link,
-          image: detailedProduct.imageUrl || product.image,
-          retailer: product.retailer,
-          rating: detailedProduct.rating || product.rating || 'N/A',
-          delivery: product.delivery || 'Check website for details',
-          features: Array.isArray(detailedProduct.features) ? detailedProduct.features : [],
-          specifications: detailedProduct.specifications || {},
-          description: detailedProduct.description || '',
-          inStock: detailedProduct.inStock !== false,
-          aiExtracted: true
-        };
-      } catch (parseError) {
-        console.error('Error parsing AI extraction result for product details:', parseError);
-        throw new Error('Failed to parse AI-extracted product details');
+        scrapingResult = await this.scrapeWithPuppeteer(url, false);
+      } catch (puppeteerError) {
+        console.log(`Puppeteer error fetching ${url}: ${puppeteerError.message}`);
       }
-    } catch (error) {
-      console.error('Error extracting product details with AI:', error);
-      
-      // Return the original product with an error flag
+    }
+    
+    // If both fail, try direct request
+    if (!scrapingResult.success) {
+      try {
+        const requestResult = await this.makeRequest(url, false, false);
+        scrapingResult = { 
+          html: requestResult.data, 
+          success: requestResult.success
+        };
+      } catch (requestError) {
+        console.log(`Direct request error fetching ${url}: ${requestError.message}`);
+      }
+    }
+    
+    // If we couldn't fetch the page, return original product with error
+    if (!scrapingResult.success || !scrapingResult.html) {
       return {
-        ...product,
-        error: error.message,
-        errorDetail: 'Failed to extract detailed information'
+        ...originalProduct,
+        error: 'Failed to fetch product page',
+        url: url,
+        link: url
       };
+    }
+    
+    // Parse the scraped HTML
+    const $ = cheerio.load(scrapingResult.html);
+    const selectors = retailer.selectors;
+    
+    // Extract product details
+    const findMultipleSelectors = (selectorStr) => {
+      // Try each selector until we find a match
+      const selectorList = selectorStr.split(', ');
+      for (const selector of selectorList) {
+        const element = $(selector).first();
+        if (element.length > 0) {
+          return element;
+        }
+      }
+      return $();
+    };
+    
+    // Use various selector fallbacks to find the data
+    const titleElement = findMultipleSelectors(selectors.detailTitle);
+    const priceElement = findMultipleSelectors(selectors.detailPrice);
+    const imageElement = findMultipleSelectors(selectors.detailImage);
+    
+    const detailTitle = titleElement.text().trim() || originalProduct.name || originalProduct.title;
+    const detailPrice = priceElement.text().trim() || originalProduct.price;
+    
+    // Try multiple ways to get the image
+    let detailImage = imageElement.attr('src') || 
+                      imageElement.attr('data-src') || 
+                      imageElement.attr('data-lazy-src') || 
+                      originalProduct.image || 
+                      originalProduct.imageUrl;
+    
+    // Extract features
+    const features = [];
+    $(selectors.detailFeatures).each((i, element) => {
+      const feature = $(element).text().trim();
+      if (feature) features.push(feature);
+    });
+    
+    // Extract specifications
+    const specifications = [];
+    $(selectors.detailSpecs).each((i, element) => {
+      const cells = $(element).find('td, th');
+      if (cells.length >= 2) {
+        const key = cells.eq(0).text().trim();
+        const value = cells.eq(1).text().trim();
+        if (key && value) specifications.push({ name: key, value });
+      }
+    });
+    
+    // Check if we got meaningful data
+    if (!detailTitle && !detailPrice && features.length === 0 && specifications.length === 0) {
+      console.log('Traditional parsing failed, trying alternate methods...');
+      
+      // Try a more general approach
+      const h1Text = $('h1').first().text().trim();
+      const priceText = $('[class*="price"], [class*="Price"]').first().text().trim();
+      const description = $('meta[name="description"]').attr('content') || 
+                          $('p').slice(0, 2).text().trim();
+      
+      return {
+        name: h1Text || originalProduct.name || originalProduct.title,
+        title: h1Text || originalProduct.name || originalProduct.title,
+        price: priceText || originalProduct.price,
+        url: url,
+        link: url,
+        image: detailImage,
+        imageUrl: detailImage,
+        vendor: retailer.name,
+        retailer: retailer.name,
+        rating: originalProduct.rating || 'N/A',
+        features: [],
+        description,
+        specifications: [],
+        inStock: true,
+        vendorLogo: this.getRetailerLogo(retailer.name)
+      };
+    }
+    
+    // Return the detailed product information
+    return {
+      name: detailTitle,
+      title: detailTitle,
+      price: detailPrice,
+      url: url,
+      link: url,
+      image: detailImage,
+      imageUrl: detailImage,
+      vendor: retailer.name,
+      retailer: retailer.name,
+      rating: originalProduct.rating || 'N/A',
+      features,
+      description: features.join('. '),
+      specifications,
+      inStock: true,
+      vendorLogo: this.getRetailerLogo(retailer.name)
+    };
+  }
+
+  /**
+   * Get retailer logo URL
+   * @param {string} retailerName - Name of the retailer
+   * @returns {string} - Logo URL
+   */
+  getRetailerLogo(retailerName) {
+    const logos = {
+      'Amazon': 'https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg',
+      'Flipkart': 'https://static-assets-web.flixcart.com/fk-p-linchpin-web/fk-cp-zion/img/flipkart-plus_8d85f4.png',
+      'Meesho': 'https://images.meesho.com/images/marketing/1686234749596_512.webp',
+      'Croma': 'https://media.croma.com/image/upload/v1637759004/Croma%20Assets/CMS/CAS/Croma_Logo_R8nzz4.png',
+      'Reliance Digital': 'https://www.reliancedigital.in/build/client/images/loaders/rd_logo.svg',
+      'Myntra': 'https://assets.myntassets.com/assets/images/retaillabs/2023/7/31/389f7a69-6bcf-478d-a812-ac9ce627d0621690822284100-myntra-logo-gezxh-QR.png',
+      'Snapdeal': 'https://logos-world.net/wp-content/uploads/2020/11/Snapdeal-Logo.png',
+      'Ajio': 'https://assets.ajio.com/static/img/Ajio-Logo.svg'
+    };
+    
+    // Return the logo URL for the retailer or a placeholder if not found
+    return logos[retailerName] || 'https://via.placeholder.com/150x50?text=Retailer';
+  }
+  /**
+   * Fetch detailed information for a specific product
+   * @param {Object} product - Basic product information
+   * @returns {Promise<Object>} - Detailed product information
+   */
+  async fetchProductDetails(product) {
+    try {
+      console.log(`Fetching details for product: ${product.name}`);
+      
+      if (!product.url || product.url === '#') {
+        console.error('Invalid product URL');
+        return product;
+      }
+      
+      // Determine which retailer this product is from
+      const retailerName = product.vendor || product.seller || 'Unknown';
+      const retailer = Object.values(this.retailers).find(r => r.name === retailerName) || 
+                      Object.values(this.retailers).find(r => product.url.includes(r.baseUrl));
+      
+      if (!retailer) {
+        console.error(`Could not determine retailer for URL: ${product.url}`);
+        return product;
+      }
+      
+      console.log(`Fetching details from ${retailer.name} for URL: ${product.url}`);
+      
+      // Fetch the product page
+      let result;
+      if (retailer.type === 'dynamic') {
+        console.log('Using Playwright for product details');
+        result = await this.scrapeWithPlaywright(product.url);
+      } else {
+        console.log('Using direct request for product details');
+        result = await this.makeRequest(product.url);
+      }
+      
+      // If first method fails, try alternative methods
+      if (!result.success || !result.html) {
+        console.log('First attempt failed, trying Puppeteer');
+        result = await this.scrapeWithPuppeteer(product.url);
+      }
+      
+      if (!result.success || !result.html) {
+        console.log('Second attempt failed, trying direct request');
+        result = await this.makeRequest(product.url);
+      }
+      
+      if (!result.success || !result.html) {
+        console.error('All scraping methods failed');
+        return product;
+      }
+      
+      // Parse the HTML to extract detailed product information
+      const $ = cheerio.load(result.html);
+      const selectors = retailer.selectors;
+      
+      // Extract detailed information
+      const detailedProduct = { ...product };
+      
+      // Extract price (if not already available)
+      if (!detailedProduct.price || detailedProduct.price === 'Check on site') {
+        const priceEl = $(selectors.detailPrice);
+        if (priceEl.length > 0) {
+          detailedProduct.price = priceEl.first().text().trim();
+        }
+      }
+      
+      // Extract title (if not already available)
+      if (!detailedProduct.name) {
+        const titleEl = $(selectors.detailTitle);
+        if (titleEl.length > 0) {
+          detailedProduct.name = titleEl.first().text().trim();
+        }
+      }
+      
+      // Extract image (if not already available)
+      if (!detailedProduct.imageUrl) {
+        const imageEl = $(selectors.detailImage);
+        if (imageEl.length > 0) {
+          detailedProduct.imageUrl = imageEl.first().attr('src');
+        }
+      }
+      
+      // Extract features
+      const features = [];
+      $(selectors.detailFeatures).each((i, el) => {
+        const featureText = $(el).text().trim();
+        if (featureText && !features.includes(featureText)) {
+          features.push(featureText);
+        }
+      });
+      detailedProduct.features = features;
+      
+      // Extract specifications
+      const specs = {};
+      $(selectors.detailSpecs).each((i, el) => {
+        if (i % 2 === 0) {
+          const key = $(el).text().trim();
+          const value = $(selectors.detailSpecs).eq(i + 1).text().trim();
+          if (key && value) {
+            specs[key] = value;
+          }
+        }
+      });
+      detailedProduct.specifications = specs;
+      
+      // Check if in stock
+      const stockText = $('body').text();
+      detailedProduct.inStock = !stockText.includes('out of stock') && 
+                               !stockText.includes('currently unavailable') &&
+                               !stockText.includes('sold out');
+      
+      console.log(`Successfully fetched details for ${detailedProduct.name}`);
+      return detailedProduct;
+      
+    } catch (error) {
+      console.error('Error fetching product details:', error);
+      return product;
     }
   }
 
+  /**
+   * Parse products from HTML content
+   * @param {string} html - HTML content
+   * @param {Object} retailer - Retailer configuration
+   * @param {string} keywords - Search keywords
+   * @returns {Promise<Array<Object>>} - Array of product objects
+   */
+  async parseProductsFromHTML(html, retailer, keywords) {
+    try {
+      console.log(`Parsing HTML from ${retailer.name}...`);
+      
+      const $ = cheerio.load(html);
+      const products = [];
+      const selectors = retailer.selectors;
+      
+      // Find product containers
+      const productContainers = $(selectors.productContainer);
+      console.log(`Found ${productContainers.length} potential product containers`);
+      
+      if (productContainers.length === 0) {
+        console.log('No product containers found, trying alternative parsing...');
+        return await this.parseProductsAlternative($, retailer, keywords);
+      }
+      
+      // Process each product container
+      productContainers.each((index, container) => {
+        try {
+          // Limit to first 10 products for performance
+          if (index >= 10) return false;
+          
+          const $container = $(container);
+          
+          // Extract product details
+          let name = $container.find(selectors.productTitle).first().text().trim();
+          let price = $container.find(selectors.productPrice).first().text().trim();
+          let imageUrl = $container.find(selectors.productImage).first().attr('src');
+          let rating = $container.find(selectors.productRating).first().text().trim();
+          
+          // Extract link - handle relative URLs
+          let link = $container.find(selectors.productLink).first().attr('href');
+          if (link && !link.startsWith('http')) {
+            link = link.startsWith('/') 
+              ? `${retailer.baseUrl}${link}` 
+              : `${retailer.baseUrl}/${link}`;
+          }
+          
+          // Skip if essential data is missing
+          if (!name || !price) return;
+          
+          // Clean up data
+          name = name.replace(/\\n/g, ' ').replace(/\s+/g, ' ').trim();
+          price = price.replace(/\\n/g, ' ').replace(/\s+/g, ' ').trim();
+          
+          // Extract original price and discount if available
+          let originalPrice = null;
+          let discount = null;
+          
+          // Look for original price near the current price
+          const priceParent = $container.find(selectors.productPrice).first().parent();
+          const originalPriceEl = priceParent.find('.a-text-price, .a-price-strike, ._3I9_wc, ._30jeq3');
+          
+          if (originalPriceEl.length > 0) {
+            originalPrice = originalPriceEl.first().text().trim();
+          }
+          
+          // Look for discount percentage
+          const discountEl = $container.find('.a-badge-text, .a-badge-percentage, ._3Ay6Sb, ._1V_ZGU');
+          if (discountEl.length > 0) {
+            discount = discountEl.first().text().trim();
+            // Ensure discount has % symbol
+            if (discount && !discount.includes('%')) {
+              discount = `${discount}%`;
+            }
+          }
+          
+          // Add product to results
+          products.push({
+            name,
+            price,
+            originalPrice,
+            discount,
+            imageUrl,
+            rating,
+            url: link,
+            vendor: retailer.name,
+            inStock: true // Assume in stock by default
+          });
+          
+        } catch (error) {
+          console.error(`Error parsing product ${index} from ${retailer.name}:`, error);
+        }
+      });
+      
+      console.log(`Successfully parsed ${products.length} products from ${retailer.name}`);
+      return products;
+      
+    } catch (error) {
+      console.error(`Error parsing HTML from ${retailer.name}:`, error);
+      return [];
+    }
+  }
+  
+  /**
+   * Alternative parsing method when standard selectors fail
+   * @param {Object} $ - Cheerio instance
+   * @param {Object} retailer - Retailer configuration
+   * @param {string} keywords - Search keywords
+   * @returns {Promise<Array<Object>>} - Array of product objects
+   */
+  async parseProductsAlternative($, retailer, keywords) {
+    try {
+      console.log(`Using alternative parsing for ${retailer.name}...`);
+      
+      const products = [];
+      
+      // Look for common product patterns
+      const productPatterns = [
+        // Look for elements with price and image
+        'div:has(img):has(a):has(.price, [class*="price"], [class*="Price"])',
+        // Look for card-like elements
+        '.card, .product-card, .item, [class*="product-"], [class*="item-"]',
+        // Look for elements with links and prices
+        'a:has(img):has([class*="price"], [class*="Price"])',
+        // Amazon specific
+        '[data-component-type="s-search-result"]',
+        // Flipkart specific
+        '._1AtVbE, ._4ddWXP, ._1xHGtK, ._3pLy-c',
+        // Meesho specific
+        '.ProductList__Wrapper, [data-testid="product-container"]',
+        // Croma specific
+        '.product-item, .cp-card, .product-list__item',
+        // Reliance Digital specific
+        '.sp.grid, .product-grid, .prod-grid, .pl__container',
+        // Generic product containers
+        '[class*="product-container"], [class*="search-result"]'
+      ];
+      
+      // Try each pattern until we find products
+      for (const pattern of productPatterns) {
+        const elements = $(pattern);
+        console.log(`Found ${elements.length} elements matching pattern: ${pattern}`);
+        
+        if (elements.length > 0) {
+          elements.each((index, element) => {
+            try {
+              // Limit to first 10 products
+              if (index >= 10) return false;
+              
+              // Look for elements with price-like content
+              const priceRegex = /(?:₹|Rs\.?|INR)\s*\d+([.,]\d+)?/i;
+              const text = $(element).text();
+              
+              if (priceRegex.test(text)) {
+                // Found a potential product
+                const title = $(element).find('h3, h2, .title, .product-title, ._4rR01T, ._3wU53n, .s1Q9rs, ._2B099V, .IRpwTa').text().trim()
+                  || $(element).find('a[title]').attr('title')
+                  || '';
+                  
+                if (!title) return;
+                
+                const priceMatch = text.match(priceRegex);
+                const price = priceMatch ? priceMatch[0].trim() : '';
+                
+                // Find link - try multiple selectors
+                let link = $(element).find('a').attr('href') || '#';
+                if (link === '#') {
+                  // Try specific selectors for different sites
+                  link = $(element).find('a._1fQZEK, a.s1Q9rs, a._2rpwqI, a.IRpwTa').attr('href') || '#';
+                }
+                
+                // Find image - try multiple selectors
+                let image = $(element).find('img').attr('src') || '';
+                if (!image) {
+                  // Try data-src attribute (lazy loading)
+                  image = $(element).find('img').attr('data-src') || '';
+                }
+                if (!image) {
+                  // Try specific selectors for different sites
+                  image = $(element).find('img._396cs4, img._2r_T1I, .s-image, img[data-image-latency="s-product-image"]').attr('src') || '';
+                }
+                
+                // Find rating
+                let rating = 'N/A';
+                const ratingEl = $(element).find('._3LWZlK, ._1lRcqv, .a-icon-star-small .a-icon-alt, .a-icon-star .a-icon-alt');
+                if (ratingEl.length > 0) {
+                  rating = ratingEl.first().text().trim();
+                }
+                
+                // Find original price
+                let originalPrice = null;
+                const originalPriceEl = $(element).find('._3I9_wc, .a-text-price, .a-price-strike');
+                if (originalPriceEl.length > 0) {
+                  originalPrice = originalPriceEl.first().text().trim();
+                }
+                
+                // Find discount
+                let discount = null;
+                const discountEl = $(element).find('._3Ay6Sb, ._1V_ZGU, .a-badge-text, .a-badge-percentage');
+                if (discountEl.length > 0) {
+                  discount = discountEl.first().text().trim();
+                  if (discount && !discount.includes('%')) {
+                    discount = `${discount}%`;
+                  }
+                }
+                
+                products.push({
+                  name: title,
+                  price: price,
+                  originalPrice: originalPrice,
+                  discount: discount,
+                  imageUrl: image,
+                  url: link.startsWith('http') ? link : (link.startsWith('/') ? `${retailer.baseUrl}${link}` : `${retailer.baseUrl}/${link}`),
+                  rating: rating,
+                  inStock: true,
+                  vendor: retailer.name
+                });
+              }
+            } catch (error) {
+              console.error(`Error in alternative parsing for element ${index}:`, error);
+            }
+          });
+          
+          // If we found products, return them
+          if (products.length > 0) {
+            console.log(`Found ${products.length} products using alternative parsing`);
+            return products;
+          }
+        }
+      }
+      
+      return products;
+    } catch (error) {
+      console.error(`Error in alternative parsing for ${retailer.name}:`, error);
+      return [];
+    }
+  }
+}
+
+  /**
+   * Scrape products by keywords
+   * @param {string} keywords - Search keywords
+   * @returns {Promise<Object>} - Object containing results and metadata
+   */
+  async scrapeProductsByKeywords(keywords) {
+    try {
+      console.log(`Scraping products for keywords: ${keywords}`);
+      
+      // Use the searchProduct method to get results
+      const results = await this.searchProduct(keywords);
+      
+      return {
+        query: keywords,
+        count: results.length,
+        results
+      };
+    } catch (error) {
+      console.error('Error scraping products by keywords:', error);
+      return {
+        query: keywords,
+        count: 0,
+        results: []
+      };
+    }
+  }
+  
   /**
    * Search for a product across multiple retailers
    * @param {string} query - Search query
    * @returns {Promise<Array<Object>>} - Array of product objects
    */
   async searchProduct(query) {
-    return (await this.scrapeProductsByKeywords(query)).results;
-  }
-
-  /**
-   * Consolidate product data from multiple sources
-   * @param {Array<Object>} products - Array of product objects
-   * @param {string} keywords - Original search keywords
-   * @returns {Promise<Object>} - Consolidated product data
-   */
-  async consolidateProductData(products, keywords) {
     try {
-      if (!products || products.length === 0) {
-        throw new Error('No products to consolidate');
-      }
+      console.log(`Searching for product: ${query}`);
       
-      // Group products by retailer
-      const productsByRetailer = {};
-      products.forEach(product => {
-        const retailer = product.retailer;
-        if (!productsByRetailer[retailer]) {
-          productsByRetailer[retailer] = [];
-        }
-        productsByRetailer[retailer].push(product);
-      });
+      // Normalize the query
+      const normalizedQuery = query.trim().toLowerCase();
       
-      // Find the best match product (usually the most common one)
-      const bestMatchProduct = await this.findBestMatchProduct(keywords, products);
+      // Array to store all results
+      const allResults = [];
       
-      // Get detailed information for the best match
-      const detailedBestMatch = await this.fetchProductDetails(bestMatchProduct);
-      
-      // Find price range
-      const prices = products.map(p => this.extractNumericPrice(p.price)).filter(p => p !== Infinity);
-      const minPrice = Math.min(...prices);
-      const maxPrice = Math.max(...prices);
-      const avgPrice = prices.reduce((sum, price) => sum + price, 0) / prices.length;
-      
-      // Find retailers with the lowest and highest prices
-      let lowestPriceRetailer = '';
-      let highestPriceRetailer = '';
-      let lowestPrice = Infinity;
-      let highestPrice = -Infinity;
-      
-      for (const product of products) {
-        const price = this.extractNumericPrice(product.price);
-        if (price < lowestPrice) {
-          lowestPrice = price;
-          lowestPriceRetailer = product.retailer;
-        }
-        if (price > highestPrice) {
-          highestPrice = price;
-          highestPriceRetailer = product.retailer;
-        }
-      }
-      
-      // Return consolidated data
-      return {
-        productName: detailedBestMatch.title || bestMatchProduct.title,
-        keywords,
-        priceRange: {
-          min: minPrice,
-          max: maxPrice,
-          avg: avgPrice,
-          formattedMin: `₹${minPrice.toFixed(2)}`,
-          formattedMax: `₹${maxPrice.toFixed(2)}`,
-          formattedAvg: `₹${avgPrice.toFixed(2)}`
-        },
-        lowestPriceRetailer,
-        highestPriceRetailer,
-        priceVariancePercentage: ((maxPrice - minPrice) / minPrice * 100).toFixed(2),
-        bestMatchProduct: detailedBestMatch,
-        retailers: productsByRetailer,
-        allProducts: products,
-        timestamp: new Date().toISOString()
-      };
-    } catch (error) {
-      console.error('Error consolidating product data:', error);
-      
-      return {
-        error: error.message,
-        keywords,
-        products,
-        timestamp: new Date().toISOString()
-      };
-    }
-  }
-
-  /**
-   * Find the best matching product from a list based on keywords
-   * @param {string} keywords - Search keywords
-   * @param {Array<Object>} products - Array of product objects
-   * @returns {Promise<Object>} - Best matching product
-   */
-  async findBestMatchProduct(keywords, products) {
-    if (!products || products.length === 0) {
-      throw new Error('No products provided');
-    }
-    
-    // If only one product, it's the best match by default
-    if (products.length === 1) {
-      return products[0];
-    }
-    
-    try {
-      // Normalize keywords
-      const normalizedKeywords = keywords.toLowerCase().trim();
-      
-      // Score each product based on keyword match
-      const scoredProducts = products.map(product => {
-        const title = product.title.toLowerCase();
-        const keywordMatches = normalizedKeywords.split(' ').filter(keyword => 
-          title.includes(keyword.trim())
-        ).length;
+      // Search across all retailers
+      for (const retailerKey in this.retailers) {
+        const retailer = this.retailers[retailerKey];
+        console.log(`Searching on ${retailer.name}...`);
         
-        return {
-          product,
-          score: keywordMatches
-        };
-      });
-      
-      // Sort by score (highest first)
-      scoredProducts.sort((a, b) => b.score - a.score);
-      
-      // If the top score is good enough, return that product
-      if (scoredProducts[0].score > 0) {
-        return scoredProducts[0].product;
+        try {
+          // Construct the search URL
+          const searchUrl = retailer.searchUrl.replace('{query}', encodeURIComponent(normalizedQuery));
+          console.log(`Search URL: ${searchUrl}`);
+          
+          // Determine the scraping method based on retailer type
+          let result;
+          if (retailer.type === 'dynamic') {
+            console.log(`Using ${retailer.preferredMethod} for ${retailer.name}`);
+            
+            if (retailer.preferredMethod === 'playwright') {
+              result = await this.scrapeWithPlaywright(searchUrl);
+            } else {
+              result = await this.scrapeWithPuppeteer(searchUrl);
+            }
+          } else {
+            console.log(`Using direct request for ${retailer.name}`);
+            result = await this.makeRequest(searchUrl);
+          }
+          
+          // Check if scraping was successful
+          if (!result.success || !result.html) {
+            console.log(`Failed to scrape ${retailer.name}, trying alternative method...`);
+            
+            // Try alternative method
+            if (retailer.type === 'dynamic') {
+              if (retailer.preferredMethod === 'playwright') {
+                result = await this.scrapeWithPuppeteer(searchUrl);
+              } else {
+                result = await this.scrapeWithPlaywright(searchUrl);
+              }
+            }
+            
+            // If still unsuccessful, skip this retailer
+            if (!result.success || !result.html) {
+              console.log(`Skipping ${retailer.name} due to scraping failure`);
+              continue;
+            }
+          }
+          
+          // Parse the HTML to extract products
+          const products = await this.parseProductsFromHTML(result.html, retailer, normalizedQuery);
+          
+          // Add retailer information to each product
+          const retailerProducts = products.map(product => ({
+            ...product,
+            retailer: retailer.name,
+            retailerLogo: this.getRetailerLogo(retailer.name)
+          }));
+          
+          console.log(`Found ${retailerProducts.length} products from ${retailer.name}`);
+          
+          // Add to all results
+          allResults.push(...retailerProducts);
+        } catch (error) {
+          console.error(`Error searching on ${retailer.name}:`, error);
+        }
       }
       
-      // Otherwise, use price as a tiebreaker (prefer middle price)
-      const prices = products.map(p => this.extractNumericPrice(p.price)).filter(p => p !== Infinity);
-      const avgPrice = prices.reduce((sum, price) => sum + price, 0) / prices.length;
-      
-      // Find product closest to average price
-      products.sort((a, b) => {
+      // Sort results by price (lowest first)
+      allResults.sort((a, b) => {
         const priceA = this.extractNumericPrice(a.price);
         const priceB = this.extractNumericPrice(b.price);
-        return Math.abs(priceA - avgPrice) - Math.abs(priceB - avgPrice);
+        return priceA - priceB;
       });
       
-      return products[0];
-    } catch (error) {
-      console.error('Error finding best match product:', error);
+      // Mark the lowest price product
+      if (allResults.length > 0) {
+        allResults[0].isLowestPrice = true;
+      }
       
-      // Fallback to the first product
-      return products[0];
+      // Mark the best deal (highest discount)
+      const bestDeal = allResults.reduce((best, current) => {
+        const currentDiscount = current.discount ? 
+          parseFloat(current.discount.replace(/[^0-9.]/g, '')) : 0;
+        const bestDiscount = best ? 
+          parseFloat(best.discount?.replace(/[^0-9.]/g, '') || '0') : 0;
+        
+        return currentDiscount > bestDiscount ? current : best;
+      }, null);
+      
+      if (bestDeal) {
+        bestDeal.isBestDeal = true;
+      }
+      
+      console.log(`Total products found across all retailers: ${allResults.length}`);
+      return allResults;
+    } catch (error) {
+      console.error('Error searching for product:', error);
+      return [];
     }
   }
 }
