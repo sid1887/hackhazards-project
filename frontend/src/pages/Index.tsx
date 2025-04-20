@@ -296,6 +296,30 @@ const Index = () => {
     return formattedProducts;
   };
 
+  // Helper function to restore search results from storage
+  const restoreFromStorage = () => {
+    const storedQuery = localStorage.getItem('lastSearchQuery');
+    const storedProducts = localStorage.getItem('searchResults');
+
+    if (storedQuery && storedProducts) {
+      try {
+        const parsedResults = JSON.parse(storedProducts);
+        setProducts(parsedResults);
+        setQuery(storedQuery);
+        setLastQuery(storedQuery);
+        setSearchPerformed(true);
+        setShowIntro(false);
+        toast.success(`Restored previous search for "${storedQuery}"`);
+      } catch (error) {
+        console.error('Error restoring search:', error);
+        toast.error('Could not restore previous search');
+      }
+    } else {
+      // If no stored search, just reset to intro state
+      resetSearch();
+    }
+  };
+
   // Search mutation with React Query
   const searchMutation = useMutation({
     mutationFn: async (query: string) => {
@@ -332,11 +356,25 @@ const Index = () => {
         const formattedProducts = formatProducts(rawProducts);
         
         // Save results and metadata to both localStorage and sessionStorage
-        localStorage.setItem('searchResults', JSON.stringify(formattedProducts));
-        sessionStorage.setItem('lastSearchResults', JSON.stringify(formattedProducts));
-        sessionStorage.setItem('lastSearchQuery', lastQuery);
-        sessionStorage.setItem('searchPerformed', 'true');
+        try {
+          // Save to localStorage for persistence across sessions
+          localStorage.setItem('searchResults', JSON.stringify(formattedProducts));
+          localStorage.setItem('lastSearchQuery', lastQuery);
+          localStorage.setItem('lastSearchTimestamp', Date.now().toString());
+          localStorage.setItem('failedRetailers', JSON.stringify(data.failedRetailers || []));
+          localStorage.setItem('scrapedRetailers', JSON.stringify(data.scrapedRetailers || []));
+          
+          // Save to sessionStorage for current session
+          sessionStorage.setItem('lastSearchResults', JSON.stringify(formattedProducts));
+          sessionStorage.setItem('lastSearchQuery', lastQuery);
+          sessionStorage.setItem('searchPerformed', 'true');
+          
+          console.log('Saved search results to storage:', formattedProducts.length);
+        } catch (storageError) {
+          console.error('Error saving to storage:', storageError);
+        }
         
+        // Update state
         setProducts(formattedProducts);
         setFailedRetailers(data.failedRetailers || []);
         setScrapedRetailers(data.scrapedRetailers || []);
@@ -390,11 +428,27 @@ const Index = () => {
         const formattedProducts = formatProducts(rawProducts);
         
         // Save to both localStorage and sessionStorage
-        localStorage.setItem('searchResults', JSON.stringify(formattedProducts));
-        sessionStorage.setItem('lastSearchResults', JSON.stringify(formattedProducts));
-        sessionStorage.setItem('lastSearchQuery', 'Image search');
-        sessionStorage.setItem('searchPerformed', 'true');
+        try {
+          // Save to localStorage for persistence across sessions
+          localStorage.setItem('searchResults', JSON.stringify(formattedProducts));
+          localStorage.setItem('lastSearchQuery', 'Image search');
+          localStorage.setItem('lastSearchTimestamp', Date.now().toString());
+          localStorage.setItem('searchType', 'image');
+          localStorage.setItem('failedRetailers', JSON.stringify(data.failedRetailers || []));
+          localStorage.setItem('scrapedRetailers', JSON.stringify(data.scrapedRetailers || []));
+          
+          // Save to sessionStorage for current session
+          sessionStorage.setItem('lastSearchResults', JSON.stringify(formattedProducts));
+          sessionStorage.setItem('lastSearchQuery', 'Image search');
+          sessionStorage.setItem('searchPerformed', 'true');
+          sessionStorage.setItem('searchType', 'image');
+          
+          console.log('Saved image search results to storage:', formattedProducts.length);
+        } catch (storageError) {
+          console.error('Error saving image search to storage:', storageError);
+        }
         
+        // Update state
         setProducts(formattedProducts);
         setFailedRetailers(data.failedRetailers || []);
         setScrapedRetailers(data.scrapedRetailers || []);
@@ -424,17 +478,66 @@ const Index = () => {
     [searchMutation]
   );
 
+  // Load saved results on initial render
+  useEffect(() => {
+    // Check URL parameters for search query
+    const urlParams = new URLSearchParams(window.location.search);
+    const queryParam = urlParams.get('q');
+    
+    // Check if there are saved results in localStorage
+    const savedResults = localStorage.getItem('searchResults');
+    const lastQuery = localStorage.getItem('lastSearchQuery');
+    
+    if (queryParam) {
+      // If URL has a query parameter, perform that search
+      console.log('Found query parameter in URL:', queryParam);
+      setLastQuery(queryParam);
+      debouncedSearch(queryParam);
+    } else if (savedResults && lastQuery) {
+      // Otherwise load from localStorage if available
+      try {
+        const parsedResults = JSON.parse(savedResults);
+        setProducts(parsedResults);
+        setLastQuery(lastQuery);
+        setShowIntro(false);
+        setSearchPerformed(true);
+        console.log('Loaded saved results:', parsedResults.length);
+        
+        // Update URL to reflect the loaded search
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.set('q', lastQuery);
+        window.history.replaceState({}, '', newUrl.toString());
+      } catch (error) {
+        console.error('Error parsing saved results:', error);
+      }
+    }
+  }, []);
+
   // Handler for text search
   const performSearch = (query: string) => {
     if (query.trim().length < 2) {
       toast.error('Please enter at least 2 characters');
       return;
     }
+    
+    // Update URL with search query
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.set('q', query);
+    window.history.pushState({}, '', newUrl.toString());
+    
     debouncedSearch(query);
   };
 
   // Handler for image search
   const handleImageSearch = (imageData: string, extractedKeywords?: string) => {
+    // Update URL to indicate image search
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.set('mode', 'image');
+    if (extractedKeywords) {
+      newUrl.searchParams.set('keywords', extractedKeywords);
+    }
+    window.history.pushState({}, '', newUrl.toString());
+    
     imageSearchMutation.mutate({ imageData, extractedKeywords });
   };
 
@@ -455,6 +558,25 @@ const Index = () => {
     });
   };
 
+  // Handler to reset search and go back to initial state
+  const resetSearch = () => {
+    // Clear URL parameters
+    const newUrl = new URL(window.location.href);
+    newUrl.search = '';
+    window.history.pushState({}, '', newUrl.toString());
+    
+    // Reset state
+    setShowIntro(true);
+    setSearchPerformed(false);
+    setProducts([]);
+    setLastQuery('');
+    setQuery(''); // Also reset query input
+    setError(null);
+    
+    // Don't clear localStorage to allow returning to previous search
+    toast.info('Search reset.');
+  };
+  
   // Button handler to scroll to section
   const scrollToSection = (sectionId: string) => {
     const element = document.getElementById(sectionId);
@@ -797,9 +919,9 @@ console.log(\`Lowest price: \${result.lowestPrice.seller} - \${result.lowestPric
                       glowColor="red"
                       className="mt-4"
                       onClick={() => {
-                        setSearchPerformed(false);
-                        setShowIntro(true);
-                        setError(null);
+                        resetSearch();
+                        // Force remount so our initial-useEffect re-fires
+                        navigate('/', { replace: true });
                       }}
                     >
                       Back to Search

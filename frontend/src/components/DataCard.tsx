@@ -129,8 +129,9 @@ const DataCard: React.FC<DataCardProps> = ({ product, index, onSelect }) => {
   return (
     <Card 
       className={cn(
-        'glassmorphism-panel-intense overflow-hidden transform transition-all duration-500 opacity-0 led-border-glow',
+        'glassmorphism-panel-intense overflow-hidden transform transition-all duration-500 opacity-100 led-border-glow',
         'hover:translate-y-[-5px] cursor-pointer',
+        'animate-fade-in'
       )}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}

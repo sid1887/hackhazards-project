@@ -1,0 +1,250 @@
+{
+  "usableSessionsCount": 3,
+  "retiredSessionsCount": 0,
+  "sessions": [
+    {
+      "id": "session_etfYQsoMjt",
+      "cookieJar": {
+        "version": "tough-cookie@5.1.2",
+        "storeType": "MemoryCookieStore",
+        "rejectPublicSuffixes": true,
+        "enableLooseMode": false,
+        "allowSpecialUseDomain": true,
+        "prefixSecurity": "silent",
+        "cookies": [
+          {
+            "key": "ORDER_BLOCK_EXPERIMENT",
+            "value": "0.39149004374393437",
+            "domain": "www.meesho.com",
+            "path": "/",
+            "hostOnly": true,
+            "creation": "2025-04-20T14:49:24.770Z",
+            "lastAccessed": "2025-04-20T14:49:24.770Z"
+          },
+          {
+            "key": "ANONYMOUS_USER_CONFIG",
+            "value": "j%3A%7B%22clientId%22%3A%224c2c1784-b826-45f2-83f6-63742951%22%2C%22instanceId%22%3A%224c2c1784-b826-45f2-83f6-63742951%22%2C%22xo%22%3A%22eyJ0eXBlIjoiY29tcG9zaXRlIn0%3D.eyJqd3QiOiJleUpvZEhSd2N6b3ZMMjFsWlhOb2J5NWpiMjB2ZG1WeWMybHZiaUk2SWpFaUxDSm9kSFJ3Y3pvdkwyMWxaWE5vYnk1amIyMHZhWE52WDJOdmRXNTBjbmxmWTI5a1pTSTZJa2xPSWl3aVlXeG5Jam9pU0ZNeU5UWWlmUS5leUpwWVhRaU9qRTNORFV4TmpBMU5qZ3NJbVY0Y0NJNk1Ua3dNamcwTURVMk9Dd2lhSFIwY0hNNkx5OXRaV1Z6YUc4dVkyOXRMMmx1YzNSaGJtTmxYMmxrSWpvaU5HTXlZekUzT0RRdFlqZ3lOaTAwTldZeUxUZ3paall0TmpNM05ESTVOVEVpTENKb2RIUndjem92TDIxbFpYTm9ieTVqYjIwdllXNXZibmx0YjNWelgzVnpaWEpmYVdRaU9pSTFOVE5pTkdJeFpTMDRabU5rTFRSalpEWXRPVEk0TlMxak1UQXhZbVprT1dJMk16TWlmUS43RG9ieHFYdVNYeFNtdTBtQ3V4dkxWMkRicTA2cTN4LVNWelQxc1ZRRTRvIiwieG8iOm51bGx9%22%2C%22createdAt%22%3A%222025-04-20T14%3A49%3A28.936Z%22%7D",
+            "expires": "2028-04-19T14:49:28.000Z",
+            "maxAge": 94608000,
+            "domain": "www.meesho.com",
+            "path": "/",
+            "hostOnly": true,
+            "creation": "2025-04-20T14:49:24.770Z",
+            "lastAccessed": "2025-04-20T14:49:24.770Z"
+          },
+          {
+            "key": "_abck",
+            "value": "782EEDAF99B0F3A6B155B530D30F1705~-1~YAAQVrcsMR+FZkKWAQAAwwCtUw0vOvfLTprObluckaxO/790kbNLxhgzWFHeJ5OAE6I5B279oBYnpnVWczQklY6boZJ//yrmszoIn5VsgDaA0niwcOLOAu1p2RlW6DUMPJZsK981WrFnH6catcptJQrWi/hWMK3YwfkGC6+7KUJyxkG8uu+MpTfCn5fGr5yksWoyIVkrtJ49TJazAlQ3XRmAVeaZQX30FcttlRZRjD2k5c+qQx/TWv5dJVyzL0lbBhjMWSNB0bDhQUsr9fgiTmJIfaoTY0OMD09Y8TMAyy2hKPWs8+LasdSydE41cugzCPiUM4XkK6EsSPiA0PYkFjFtV1wQow8nzk1DDHJA+fZ7PsI7aGFXFcnDsL1BUxrhYg3bpN5EL8Irz14At6TNNM0aXlZkqIskMxAlDQI=~-1~-1~-1",
+            "expires": "2026-04-20T14:49:29.000Z",
+            "maxAge": 31536000,
+            "domain": "meesho.com",
+            "path": "/",
+            "secure": true,
+            "hostOnly": false,
+            "creation": "2025-04-20T14:49:24.770Z",
+            "lastAccessed": "2025-04-20T14:49:24.770Z"
+          },
+          {
+            "key": "ak_bmsc",
+            "value": "760B040511D85CBF4E632CFA6610A454~000000000000000000000000000000~YAAQVrcsMSCFZkKWAQAAwwCtUxvu2zigKeK1XpVIFmn1eiTIsqoUwW/Z4nOmrkloBWVT0pwGxwSXnQ2eF0IaU+NABNcXgTKmG54kOoYXxoc334hkrLDdbcMg7TFWQMlgiAiyTdOfDCMDI4LmnWj9wKF8/ukwY79o+YDUOmGXssxhfsn01LyAMkFDS734IfJs/xqgldh3b61YR3HgHRE5bPgA4igDBRnhmjcCvcr0EuQwU7yRKYYNk7D0BEfNWvgquQUgi0DIeztSz++pKnmf5+CFMi8VNS+rW4hBiVkZsNenZvblkJgAjxn75+Dzq+y6cHtnvUPHSOu57BE/ZVHfVTrwulzz5imj2AEycgDI6HRaJ4OKQmm5cYe0QJRZPNLLRVFeb/fLHN2ixKo9TJe42N8pmtfVGx7QlEM=",
+            "expires": "2025-04-20T16:49:28.000Z",
+            "maxAge": 7199,
+            "domain": "meesho.com",
+            "path": "/",
+            "hostOnly": false,
+            "creation": "2025-04-20T14:49:24.774Z",
+            "lastAccessed": "2025-04-20T14:49:24.774Z"
+          },
+          {
+            "key": "bm_mi",
+            "value": "8ED7447E1D581B711B9E9D7A7EAC436D~YAAQVrcsMSGFZkKWAQAAwwCtUxuJGvlTQOXRMbbp5IFEnXfLNJFYRTcvUP3naQQhTT+vtKA7O0ERDN17MwjN+O2l3bRK/h+Kzf7ZlBrWVN400e8IbGfAjdDrdW3RRrhJFKvctGFMTB/gSI4AriX3P6eBbOlzBXU+QU5z1G1gmW6Lkeh9VnYNfLfpkOvFkYOExeVTlJj+fgfbFImZKDzfpqIou1bon4eexOu45u8T8fHkfCzC1LyG/991/EwV2rpEps3gGlIjB3iaBQ9qHp1Ok4VBHlI5w95sFfSy9GJsjx9n+CkMn2lsVJVFI1rMjRAWxlr0~1",
+            "expires": "2025-04-20T14:49:29.000Z",
+            "maxAge": 0,
+            "domain": "meesho.com",
+            "path": "/",
+            "secure": true,
+            "hostOnly": false,
+            "creation": "2025-04-20T14:49:24.775Z",
+            "lastAccessed": "2025-04-20T14:49:24.775Z"
+          },
+          {
+            "key": "bm_sz",
+            "value": "381B29594246718FFB44BBCF69683A66~YAAQVrcsMSKFZkKWAQAAwwCtUxthgi1uFRpaNsRBhghsIiBovWlDo6hG11+Y2xfOPd6oAD4zbiYXlFQeUbZ63PUvejlZDUJw58rClv37V9vzJ6kYT+AHGUlHzxYclg0JM8yXmKOMMIBXIS91L2BM0G5sXSaeuSRPEMS+HGM7ESns2CaSsHJznxBZTKy3SgLSCrrSGTPIiCgohVY6Asag8CdayaTUhicllbh5/8b0hUM//5qVVgraQgv+rtCxY/VJIS5CILrQOP2vu68TfDxJEEon5CUZHLikeu5zVXItwSSY72YZpu5IhyQR8SNyI4dsCYlVFLQYHRzCHkmpjcjGdMThxzHBP8QGrYFm+7xWbvfNYkYBbW1LHoBtIl+rIaDIIlDxkxVsu4XRQgqyht6Ke0vVLvIvoUu3sRRPjM/gE7IVyd3+RJEsmTA=~3621441~3683140",
+            "expires": "2025-04-20T18:49:28.000Z",
+            "maxAge": 14399,
+            "domain": "meesho.com",
+            "path": "/",
+            "hostOnly": false,
+            "creation": "2025-04-20T14:49:24.775Z",
+            "lastAccessed": "2025-04-20T14:49:24.775Z"
+          }
+        ]
+      },
+      "userData": {},
+      "maxErrorScore": 3,
+      "errorScoreDecrement": 0.5,
+      "expiresAt": "2025-04-20T15:39:24.265Z",
+      "createdAt": "2025-04-20T14:49:24.265Z",
+      "usageCount": 1,
+      "maxUsageCount": 50,
+      "errorScore": 0
+    },
+    {
+      "id": "session_eSj71hKVpB",
+      "cookieJar": {
+        "version": "tough-cookie@5.1.2",
+        "storeType": "MemoryCookieStore",
+        "rejectPublicSuffixes": true,
+        "enableLooseMode": false,
+        "allowSpecialUseDomain": true,
+        "prefixSecurity": "silent",
+        "cookies": []
+      },
+      "userData": {},
+      "maxErrorScore": 3,
+      "errorScoreDecrement": 0.5,
+      "expiresAt": "2025-04-20T15:39:37.818Z",
+      "createdAt": "2025-04-20T14:49:37.818Z",
+      "usageCount": 0,
+      "maxUsageCount": 50,
+      "errorScore": 0
+    },
+    {
+      "id": "session_gmTMOK10jp",
+      "cookieJar": {
+        "version": "tough-cookie@5.1.2",
+        "storeType": "MemoryCookieStore",
+        "rejectPublicSuffixes": true,
+        "enableLooseMode": false,
+        "allowSpecialUseDomain": true,
+        "prefixSecurity": "silent",
+        "cookies": [
+          {
+            "key": "mp_60483c180bee99d71ee5c084d7bb9d20_mixpanel",
+            "value": "%7B%22distinct_id%22%3A%20%2219653ad2bbe15df-09dcd1319ca5028-26011951-13c680-19653ad2bbf16dc%22%2C%22%24device_id%22%3A%20%2219653ad2bbe15df-09dcd1319ca5028-26011951-13c680-19653ad2bbf16dc%22%2C%22%24initial_referrer%22%3A%20%22%24direct%22%2C%22%24initial_referring_domain%22%3A%20%22%24direct%22%2C%22%24user_id%22%3A%20%2219653ad2bbe15df-09dcd1319ca5028-26011951-13c680-19653ad2bbf16dc%22%2C%22Is%20Anonymous%22%3A%20%22True%22%2C%22Instance_Id%22%3A%20%226576fbd2-86b5-435c-b676-8ff65875%22%2C%22Session%20ID%22%3A%20%221bd4ac07-15a7-4c2f-a0e1-48bf5b43%22%2C%22last%20event%20time%22%3A%201745160581160%7D",
+            "expires": "2026-04-20T14:49:41.000Z",
+            "domain": "meesho.com",
+            "path": "/",
+            "hostOnly": false,
+            "creation": "2025-04-20T14:49:41.171Z",
+            "lastAccessed": "2025-04-20T14:49:41.171Z"
+          },
+          {
+            "key": "_ga",
+            "value": "GA1.1.505147662.1745160581",
+            "expires": "2026-05-25T14:49:40.740Z",
+            "domain": "meesho.com",
+            "path": "/",
+            "hostOnly": false,
+            "creation": "2025-04-20T14:49:41.171Z",
+            "lastAccessed": "2025-04-20T14:49:41.171Z"
+          },
+          {
+            "key": "_ga_NEH2MEG9CT",
+            "value": "GS1.1.1745160580.1.0.1745160580.60.0.0",
+            "expires": "2026-05-25T14:49:40.739Z",
+            "domain": "meesho.com",
+            "path": "/",
+            "hostOnly": false,
+            "creation": "2025-04-20T14:49:41.171Z",
+            "lastAccessed": "2025-04-20T14:49:41.171Z"
+          },
+          {
+            "key": "_abck",
+            "value": "FA4157D36E9DB692AEB422335E00B3DD~0~YAAQHLcsMSt81EqWAQAAPj6tUw2+N00yNAGy2Qv+MeJQU5jpa2rJyrV7AVK7+E+GuT6DaaI7pYwhKoCGLqKPWG4Yqa8xEioRdARodvyl/HyR/rdQ0oHIDuWFNLg2KHNSjhhlBof8ubK/EMS8H8AMAwiV7cTty/u540HRy7eZjt8pTjVtbBGGQB6wbs4j+9Bn0YYmeuhwcofB9uRHi2qZBq5d73mLZhdQUbGieoIyeaUaSbklqqr5tMkUMKG1FZNJlXu2ZoGcXafzV/4DWQGgRxhndSatlmFeeqjF8Vfs1l8sNL9i8sSPkVZR9O/sZ5LAVNsoIcYN9S4O95v4aB5N9YK9UK0cUQ85pFS9RH2H+0K0hIbeyjYwOWExXdPL5GHeGsP88RJDtsD8CONZijySru2Drg+ralzvMaPqH2h4tBN+YES/N0rYUf9xmnA4w10cEGWmOnh9aOp64RA4HDgnPjaKCY9cHrhaaILM2E1pp6SfZh/SfyA+ZNaWiw==~-1~||0||~-1",
+            "expires": "2026-04-20T14:49:40.471Z",
+            "domain": "meesho.com",
+            "path": "/",
+            "secure": true,
+            "hostOnly": false,
+            "creation": "2025-04-20T14:49:41.171Z",
+            "lastAccessed": "2025-04-20T14:49:41.171Z"
+          },
+          {
+            "key": "bm_sz",
+            "value": "953A49C64B5AB39E749A1CF8C6F3C53B~YAAQHLcsMSZ81EqWAQAAID6tUxuNKNRTsuGHJvUdMrpOEfUV2qVrciN+HsPm/3B5i6Rg9KN8rE2iiJFbFpiIJiPXfq2Rj7s8LEbQs8FMZJmGA78ecs+sQKsmYB49hKU2pWFF10PY/84Dw/0r8gVqRm5YJqYDpqlPnVv68gqZzHo/vp+Zf/zpfxqMTNVbkiXIbNdu05LZCnX3zNkZvMRk2NmL2GKl5KtGP7km7Ag5i7Ipqb+Kvy7nB7K5xKB9FEIIN1WCeLzS/qpGL9vGPap5J7TLDITnlkAfT9wI+RQNVO3wxvCTC9iVoiPBAbaOAV4S+CW2rVdmlLII6DSF+P07xHRu7OnqjTjRJKO+aa/XGig6lRE1expSduE6Tbc8HXcjfoWX8KSB6lkcWIh8fCTLgem9FmA6EjjKC9kFl4Mfh3ATOeJ05djrIQDm4Jl4GQKF6qbWRjV0~3553335~3552838",
+            "expires": "2025-04-20T18:49:38.446Z",
+            "domain": "meesho.com",
+            "path": "/",
+            "hostOnly": false,
+            "creation": "2025-04-20T14:49:41.171Z",
+            "lastAccessed": "2025-04-20T14:49:41.171Z"
+          },
+          {
+            "key": "ak_bmsc",
+            "value": "E83267829FE0548DA10A5FD3DFC60ACF~000000000000000000000000000000~YAAQHLcsMSp81EqWAQAANj6tUxukaueeb7BUK7n5mxI1MaxaDau10neaHT91C7ALEt1mwG8KMqSTp7PGVS0uDdFi7MuptpESHljKQDHQgcy76YbHwEbUfsxdoEX/U9s02S5FYvup4wNFm7F/gvdoj5LFLUI2sFvSdMJJrzI5Jk7bG92LFuXDK61v7HsnQIDEmZvQeUPjdHgoBamxj//7br5IK1+QwfsdufgKoGRePXt0NtV97+OI6+bDiBj8aQk9pBsJy6EkJ/roC26dZbDb1Lrv0h9pQOMrTJ7EVku08rHvMYss2c9KDCh8LE6yeayrW7iO1hdcbUIRFZRI4jdMu53FraryCnvkzxA8aKLIHh3sTwvs0o4SEshFTy9nEr+saJiouyVkA/yqky1dvtnLQ0MtuueyI28WRkc1ERaOx/msDkH+z9fYN/mlH6Xvow1u16mcPzK0mkEHRV9sfg1ByoAGLhahT00QjVxqhzc=",
+            "expires": "2025-04-20T16:49:38.468Z",
+            "domain": "meesho.com",
+            "path": "/",
+            "hostOnly": false,
+            "creation": "2025-04-20T14:49:41.171Z",
+            "lastAccessed": "2025-04-20T14:49:41.171Z"
+          },
+          {
+            "key": "bm_sv",
+            "value": "9092733D4CC9F995B61F74941D5E2A9D~YAAQHLcsMSV81EqWAQAAID6tUxt7J6sEOfzvfOipbZtmbk01u8KczlSJtjf67TkgTyiKgI6N/BEVEhqjP9gOMhcq5WpsdRCXtdMLBfo0HhRheGit2WzDKZKLmWbmGP42OReC1MoFwi3bFMOHlJY35wYddTS7kJbgXNIjIzvkfpQSvRFixfEc4RDdi86s2Okw8vmE0JEvuqhDLGQNLiwERGCezvoU+y9EwwmvV5e5xTn8F9VhcDjp1b9slsRAy66a~1",
+            "expires": "2025-04-20T16:49:40.446Z",
+            "domain": "meesho.com",
+            "path": "/",
+            "secure": true,
+            "hostOnly": false,
+            "creation": "2025-04-20T14:49:41.171Z",
+            "lastAccessed": "2025-04-20T14:49:41.171Z"
+          },
+          {
+            "key": "bm_s",
+            "value": "YAAQHLcsMSR81EqWAQAAID6tUwM+QGEyVXRXejSkyH8OLpyE7+3jrNzmNLGwdkth3IvdVJD7O4rFMQfyVX7qRpzGuQkI3cGZP4hSiRaKAM2fZqGjBEA/SonCbhL0MFP7l/T/DJBL9GsmoNZ+AN+G7KehuNAIIDNx3M+pVmKjpP3kHp3WoE5rdJhXSLm9/igBsVoMmhd9pW7JGEDqhd9AjUx5ESuqKrVG2ddkFxz9S60ceUZSRr5jT9KmLhsaFkC5drXjqiQoAZxj795adJuRAVxy3aRTz2L4AE9XWgAn8WbsKyThW3BuUrj3o4zBflPKZ1y6bDnh+gQAD+rbiqUijUdkjTj3nNKgu+R2bloo3WwB7tA5mY4ZX/ebqRGBae0wJQfflOFL41Y+Tsa64Vaeg9mx0Wy8brOO2HFcpQDbsjXks4Ui9dlFCrz4luipXbsSkjTVtWjBEISQ11U=",
+            "expires": "2025-05-21T14:49:40.446Z",
+            "domain": "meesho.com",
+            "path": "/",
+            "secure": true,
+            "httpOnly": true,
+            "hostOnly": false,
+            "creation": "2025-04-20T14:49:41.171Z",
+            "lastAccessed": "2025-04-20T14:49:41.171Z"
+          },
+          {
+            "key": "ANONYMOUS_USER_CONFIG",
+            "value": "j%3A%7B%22clientId%22%3A%226576fbd2-86b5-435c-b676-8ff65875%22%2C%22instanceId%22%3A%226576fbd2-86b5-435c-b676-8ff65875%22%2C%22xo%22%3A%22eyJ0eXBlIjoiY29tcG9zaXRlIn0%3D.eyJqd3QiOiJleUpvZEhSd2N6b3ZMMjFsWlhOb2J5NWpiMjB2ZG1WeWMybHZiaUk2SWpFaUxDSm9kSFJ3Y3pvdkwyMWxaWE5vYnk1amIyMHZhWE52WDJOdmRXNTBjbmxmWTI5a1pTSTZJa2xPSWl3aVlXeG5Jam9pU0ZNeU5UWWlmUS5leUpwWVhRaU9qRTNORFV4TmpBMU9ESXNJbVY0Y0NJNk1Ua3dNamcwTURVNE1pd2lhSFIwY0hNNkx5OXRaV1Z6YUc4dVkyOXRMMmx1YzNSaGJtTmxYMmxrSWpvaU5qVTNObVppWkRJdE9EWmlOUzAwTXpWakxXSTJOell0T0dabU5qVTROelVpTENKb2RIUndjem92TDIxbFpYTm9ieTVqYjIwdllXNXZibmx0YjNWelgzVnpaWEpmYVdRaU9pSTJOVGMyWmpZeU15MWtNbU5pTFRSaU1ERXRZV000TVMwME5EZ3hOV1F4TnpBeU1tSWlmUS4zUWgyMVBaTmV2V3IxalZCX1MwU05LNGM2Z25vdlRNMlluZHhQZV9rN1VZIiwieG8iOm51bGx9%22%2C%22createdAt%22%3A%222025-04-20T14%3A49%3A42.836Z%22%7D",
+            "expires": "2026-05-25T14:49:38.641Z",
+            "domain": "www.meesho.com",
+            "path": "/",
+            "hostOnly": true,
+            "creation": "2025-04-20T14:49:41.171Z",
+            "lastAccessed": "2025-04-20T14:49:41.171Z"
+          },
+          {
+            "key": "bm_ss",
+            "value": "ab8e18ef4e",
+            "expires": "2025-04-20T15:49:40.445Z",
+            "domain": "meesho.com",
+            "path": "/",
+            "secure": true,
+            "httpOnly": true,
+            "hostOnly": false,
+            "creation": "2025-04-20T14:49:41.171Z",
+            "lastAccessed": "2025-04-20T14:49:41.171Z"
+          },
+          {
+            "key": "ORDER_BLOCK_EXPERIMENT",
+            "value": "0.5079635187997824",
+            "expires": "2025-04-20T15:39:41.171Z",
+            "domain": "www.meesho.com",
+            "path": "/",
+            "hostOnly": true,
+            "creation": "2025-04-20T14:49:41.171Z",
+            "lastAccessed": "2025-04-20T14:49:41.171Z"
+          }
+        ]
+      },
+      "userData": {},
+      "maxErrorScore": 3,
+      "errorScoreDecrement": 0.5,
+      "expiresAt": "2025-04-20T15:39:37.818Z",
+      "createdAt": "2025-04-20T14:49:37.818Z",
+      "usageCount": 1,
+      "maxUsageCount": 50,
+      "errorScore": 0
+    }
+  ]
+}
