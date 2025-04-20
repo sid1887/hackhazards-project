@@ -1,6 +1,11 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { ArrowRight, Zap, BarChart3, Search, ShieldCheck, ExternalLink, Code, ChevronsRight, AlertCircle } from 'lucide-react';
+import { toast } from "sonner";
+import { useQuery, useMutation } from '@tanstack/react-query';
+import api from '@/lib/api';
+import { debounce } from 'lodash';
+import { useLocation, useNavigate } from 'react-router-dom';
 
-import React, { useState, useEffect } from 'react';
-import { ArrowRight, Zap, BarChart3, Search, ShieldCheck, ExternalLink, Code, ChevronsRight } from 'lucide-react';
 import GlitchHeader from '@/components/GlitchHeader';
 import InputModule from '@/components/InputModule';
 import AnimatedGrid from '@/components/AnimatedGrid';
@@ -8,17 +13,54 @@ import LoadingAnimation from '@/components/LoadingAnimation';
 import Footer from '@/components/Footer';
 import FeatureSection from '@/components/FeatureSection';
 import { ProductData } from '@/components/DataCard';
-import CyberBackground from '@/components/CyberBackground';
-import HeroParticles from '@/components/HeroParticles';
 import CyberButton from '@/components/CyberButton';
 import FloatingStats from '@/components/FloatingStats';
 import { cn } from '@/lib/utils';
 
+// Define TypeScript interfaces for API responses
+interface ApiProduct {
+  id?: string;
+  name?: string;
+  title?: string;
+  imageUrl?: string;
+  image?: string;
+  price?: string;
+  originalPrice?: string;
+  vendor?: string;
+  retailer?: string;
+  vendorLogo?: string;
+  rating?: string | number;
+  url?: string;
+  link?: string;
+  [key: string]: any; // Allow for additional properties
+}
+
+interface ApiResponse {
+  success: boolean;
+  data?: ApiProduct[];
+  results?: ApiProduct[];
+  products?: ApiProduct[];
+  message?: string;
+  scrapedRetailers?: string[];
+  failedRetailers?: string[];
+  count?: number;
+  query?: string;
+}
+
 const Index = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [products, setProducts] = useState<ProductData[]>([]);
   const [showIntro, setShowIntro] = useState(true);
   const [searchPerformed, setSearchPerformed] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lastQuery, setLastQuery] = useState<string>('');
+  const [failedRetailers, setFailedRetailers] = useState<string[]>([]);
+  const [scrapedRetailers, setScrapedRetailers] = useState<string[]>([]);
+  const [query, setQuery] = useState<string>('');
+  const [isRestoring, setIsRestoring] = useState(false);
+  
   const [visibleSections, setVisibleSections] = useState({
     hero: false,
     features: false,
@@ -28,6 +70,106 @@ const Index = () => {
     cta: false,
   });
 
+  // Reset state on fresh load - only if not coming back from product details
+  useEffect(() => {
+    // Don't reset if coming from product details page
+    if (!(location.state && (location.state.fromDetails || location.state.preserveSearch))) {
+      setSearchPerformed(false);
+      setShowIntro(true);
+      setProducts([]);
+      setError(null);
+      // Clear previous search results from localStorage
+      localStorage.removeItem('searchResults');
+      localStorage.removeItem('lastQuery');
+    }
+  }, [location.pathname]); // Only run when the path changes, not on every render
+
+  // Effect to handle restoring search results when navigating back from product details
+  useEffect(() => {
+    // Check if user is returning from product details
+    if (location.state?.fromDetails && location.state?.preserveSearch) {
+      setIsRestoring(true);
+      
+      // Get stored search results
+      const storedResults = sessionStorage.getItem('searchResults');
+      const storedQuery = sessionStorage.getItem('lastSearchQuery');
+      
+      if (storedResults && storedQuery) {
+        try {
+          const parsedResults = JSON.parse(storedResults);
+          setProducts(parsedResults);
+          setQuery(storedQuery);
+          
+          // Show toast with more informative message
+          toast({
+            title: "Search Results Restored",
+            description: `Continuing where you left off with "${storedQuery}"`,
+            variant: "success",
+            duration: 3000,
+            className: "cyber-toast",
+          });
+          
+          // If there's a product ID in the state, scroll to that product after a small delay
+          if (location.state.productId) {
+            setTimeout(() => {
+              const element = document.getElementById(`product-${location.state.productId}`);
+              if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                element.classList.add('highlight-product');
+                setTimeout(() => element.classList.remove('highlight-product'), 2000);
+              }
+            }, 300);
+          }
+        } catch (error) {
+          console.error("Error restoring search results:", error);
+          toast({
+            title: "Restoration Error",
+            description: "Couldn't restore your previous search results",
+            variant: "destructive",
+          });
+        }
+      } else {
+        toast({
+          title: "No Previous Search",
+          description: "No previous search results to restore",
+          variant: "default",
+        });
+      }
+      
+      // Turn off restoring state after a brief delay to show the animation
+      setTimeout(() => {
+        setIsRestoring(false);
+      }, 1000);
+    }
+  }, [location.state, toast]);
+
+  // Effect to restore state from sessionStorage
+  useEffect(() => {
+    const storedQuery = sessionStorage.getItem('lastSearchQuery');
+    const storedProducts = sessionStorage.getItem('lastSearchResults');
+    const storedSearchPerformed = sessionStorage.getItem('searchPerformed');
+    
+    if (storedQuery && storedProducts && storedSearchPerformed === 'true') {
+      setIsRestoring(true);
+      setQuery(storedQuery);
+      setLastQuery(storedQuery);
+      setProducts(JSON.parse(storedProducts));
+      setSearchPerformed(true);
+      
+      // Small delay to show loading indicator briefly for better UX
+      setTimeout(() => {
+        setIsRestoring(false);
+      }, 600);
+    }
+  }, []);
+
+  // Clear localStorage on page unload
+  useEffect(() => {
+    const clear = () => localStorage.removeItem('searchResults');
+    window.addEventListener('beforeunload', clear);
+    return () => window.removeEventListener('beforeunload', clear);
+  }, []);
+
   // Fade-in effect for sections using Intersection Observer
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -35,7 +177,7 @@ const Index = () => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
             const sectionId = entry.target.id as keyof typeof visibleSections;
-            if (sectionId) {
+            if (sectionId && visibleSections.hasOwnProperty(sectionId)) {
               setVisibleSections((prev) => ({ ...prev, [sectionId]: true }));
             }
           }
@@ -55,92 +197,270 @@ const Index = () => {
     };
   }, []);
 
-  // Sample data for demonstration
-  const sampleProducts: ProductData[] = [
-    {
-      id: '1',
-      name: 'iPhone 13 Pro Max (256GB) - Graphite',
-      image: 'https://images.unsplash.com/photo-1605236453806-6ff36851218e?w=400',
-      price: 109900,
-      originalPrice: 129900,
-      seller: 'Amazon',
-      sellerLogo: 'https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg',
-      rating: 4.5,
-      link: 'https://amazon.in',
-      isBestDeal: true
-    },
-    {
-      id: '2',
-      name: 'iPhone 13 Pro Max (256GB) - Graphite',
-      price: 112000,
-      originalPrice: 129900,
-      image: 'https://images.unsplash.com/photo-1605236453806-6ff36851218e?w=400',
-      seller: 'Flipkart',
-      sellerLogo: 'https://logo.clearbit.com/flipkart.com',
-      rating: 4.3,
-      link: 'https://flipkart.com'
-    },
-    {
-      id: '3',
-      name: 'iPhone 13 Pro Max (256GB) - Graphite',
-      price: 107990,
-      originalPrice: 129900,
-      image: 'https://images.unsplash.com/photo-1605236453806-6ff36851218e?w=400',
-      seller: 'Reliance Digital',
-      sellerLogo: 'https://logo.clearbit.com/reliancedigital.in',
-      rating: 4.2,
-      link: 'https://reliancedigital.in',
-      isLowestPrice: true
-    },
-    {
-      id: '4',
-      name: 'Samsung Galaxy S21 Ultra 5G (256GB) - Phantom Black',
-      price: 105999,
-      originalPrice: 115999,
-      image: 'https://images.unsplash.com/photo-1610945415295-d9bbf067e59c?w=400',
-      seller: 'Amazon',
-      sellerLogo: 'https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg',
-      rating: 4.4,
-      link: 'https://amazon.in',
-      isBestDeal: true
-    },
-    {
-      id: '5',
-      name: 'Samsung Galaxy S21 Ultra 5G (256GB) - Phantom Black',
-      price: 104990,
-      originalPrice: 115999,
-      image: 'https://images.unsplash.com/photo-1610945415295-d9bbf067e59c?w=400',
-      seller: 'Croma',
-      sellerLogo: 'https://logo.clearbit.com/croma.com',
-      rating: 4.1,
-      link: 'https://croma.com',
-      isLowestPrice: true
-    },
-    {
-      id: '6',
-      name: 'Samsung Galaxy S21 Ultra 5G (256GB) - Phantom Black',
-      price: 107999,
-      originalPrice: 115999,
-      image: 'https://images.unsplash.com/photo-1610945415295-d9bbf067e59c?w=400',
-      seller: 'Flipkart',
-      sellerLogo: 'https://logo.clearbit.com/flipkart.com',
-      rating: 4.3,
-      link: 'https://flipkart.com'
+  // Helper function to normalize and format product data
+  const formatProducts = (rawProducts: ApiProduct[] | any): ProductData[] => {
+    // Make sure rawProducts is an array
+    if (!rawProducts) return [];
+    if (!Array.isArray(rawProducts)) {
+      console.error('Expected rawProducts to be an array, but got:', typeof rawProducts, rawProducts);
+      return [];
     }
-  ];
+    if (rawProducts.length === 0) return [];
+    
+    const formattedProducts = rawProducts.map((item: ApiProduct) => {
+      // Normalize price by removing currency symbols and commas
+      const normalizedPrice = item.price?.replace(/[₹$€£,]/g, '') || '0';
+      const normalizedOriginalPrice = item.originalPrice?.replace(/[₹$€£,]/g, '') || undefined;
+      
+      // Ensure we have a valid URL for the seller logo
+      const vendorName = (item.vendor || item.retailer || 'unknown').toLowerCase().replace(/\s/g, '');
+      const sellerLogo = item.vendorLogo || 
+        (vendorName !== 'unknown' ? `https://logo.clearbit.com/${vendorName}.com` : 'https://via.placeholder.com/50x20?text=Logo');
+      
+      // Create a more consistent ID based on product name and seller if no ID exists
+      const productId = item.id || 
+        (item.name && (item.vendor || item.retailer)) ? 
+          `${(item.name || item.title || '').toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 20)}-${vendorName}` :
+          Math.random().toString(36).substring(2, 15);
+      
+      return {
+        id: productId,
+        name: item.name || item.title || 'Unknown Product',
+        image: item.imageUrl || item.image || 'https://via.placeholder.com/300?text=No+Image',
+        price: parseFloat(normalizedPrice) || 0,
+        originalPrice: normalizedOriginalPrice ? parseFloat(normalizedOriginalPrice) : undefined,
+        seller: item.vendor || item.retailer || 'Unknown',
+        sellerLogo,
+        rating: typeof item.rating === 'string' ? parseFloat(item.rating) : (item.rating || undefined),
+        link: item.url || item.link || '#',
+        isBestDeal: false,
+        isLowestPrice: false
+      };
+    });
 
-  // Simulate loading and fetching products
-  const simulateSearch = (query?: string) => {
-    setIsLoading(true);
-    setShowIntro(false);
-    setProducts([]);
-    setSearchPerformed(true);
+    // Calculate lowest price and best deal flags
+    if (formattedProducts.length > 0) {
+      // Find lowest price
+      const lowestPrice = Math.min(...formattedProducts.map(p => p.price));
+      const lowestPriceProducts = formattedProducts.filter(p => p.price === lowestPrice);
+      
+      // Mark lowest price product
+      if (lowestPriceProducts.length === 1) {
+        lowestPriceProducts[0].isLowestPrice = true;
+      } else if (lowestPriceProducts.length > 1) {
+        // If multiple, use rating as tiebreaker
+        const withRatings = lowestPriceProducts.filter(p => p.rating);
+        if (withRatings.length > 0) {
+          const highestRated = withRatings.reduce((prev, current) => 
+            (prev.rating || 0) > (current.rating || 0) ? prev : current
+          );
+          highestRated.isLowestPrice = true;
+        } else {
+          // If no ratings, just mark the first one
+          lowestPriceProducts[0].isLowestPrice = true;
+        }
+      }
+      
+      // Find best deal (balancing price and rating)
+      const withRatings = formattedProducts.filter(p => p.rating !== undefined);
+      if (withRatings.length > 0) {
+        const highestPrice = Math.max(...formattedProducts.map(p => p.price));
+        const priceDiff = highestPrice - lowestPrice;
+        
+        // Calculate a score for each product (70% price, 30% rating)
+        const productsWithScores = withRatings.map(p => {
+          const priceScore = priceDiff > 0 ? ((highestPrice - p.price) / priceDiff) * 0.7 : 0.5;
+          const ratingScore = ((p.rating || 0) / 5) * 0.3;
+          return { ...p, score: priceScore + ratingScore };
+        });
+        
+        // Find product with highest score
+        const bestDeal = productsWithScores.reduce((prev, current) => 
+          (prev.score || 0) > (current.score || 0) ? prev : current
+        );
+        
+        // Mark the best deal
+        const bestProductIndex = formattedProducts.findIndex(p => p.id === bestDeal.id);
+        if (bestProductIndex !== -1) {
+          formattedProducts[bestProductIndex].isBestDeal = true;
+        }
+      } else {
+        // If no ratings, use lowest price as best deal
+        const lowestPriceProductIndex = formattedProducts.findIndex(p => p.isLowestPrice);
+        if (lowestPriceProductIndex !== -1) {
+          formattedProducts[lowestPriceProductIndex].isBestDeal = true;
+        }
+      }
+    }
+    
+    return formattedProducts;
+  };
 
-    // Simulate API delay
-    setTimeout(() => {
-      setProducts(sampleProducts);
+  // Search mutation with React Query
+  const searchMutation = useMutation({
+    mutationFn: async (query: string) => {
+      setLastQuery(query);
+      localStorage.setItem('lastSearchQuery', query);
+      
+      try {
+        const response = await api.post<ApiResponse>('/api/price-comparison/search', { query });
+        console.log('RAW API RESPONSE:', response.data);
+        return response.data;
+      } catch (error: any) {
+        console.error('Search error:', error);
+        throw new Error(error?.response?.data?.message || error?.message || 'Unknown error occurred');
+      }
+    },
+    onMutate: () => {
+      setIsLoading(true);
+      setShowIntro(false);
+      setProducts([]);
+      setSearchPerformed(true);
+      setError(null);
+    },
+    onSuccess: (data) => {
+      if (data.success) {
+        // Determine where the products array is located in the response
+        const rawProducts = data.data || data.results || data.products || [];
+        
+        if (rawProducts.length === 0) {
+          toast.error("No products found matching your search");
+          return;
+        }
+        
+        // Format the products using our helper function
+        const formattedProducts = formatProducts(rawProducts);
+        
+        // Save results and metadata to both localStorage and sessionStorage
+        localStorage.setItem('searchResults', JSON.stringify(formattedProducts));
+        sessionStorage.setItem('lastSearchResults', JSON.stringify(formattedProducts));
+        sessionStorage.setItem('lastSearchQuery', lastQuery);
+        sessionStorage.setItem('searchPerformed', 'true');
+        
+        setProducts(formattedProducts);
+        setFailedRetailers(data.failedRetailers || []);
+        setScrapedRetailers(data.scrapedRetailers || []);
+        
+        toast.success(`Found ${formattedProducts.length} products for "${lastQuery}"`);
+      } else {
+        setError(data.message || 'Failed to search for products');
+        toast.error(data.message || 'Failed to search for products');
+      }
+    },
+    onError: (error) => {
+      console.error('Error searching for products:', error);
+      setError(error.message || 'Error connecting to the search service. Please try again.');
+      toast.error('Error connecting to the search service');
+    },
+    onSettled: () => {
       setIsLoading(false);
-    }, 2000);
+    }
+  });
+
+  // Image search mutation with React Query
+  const imageSearchMutation = useMutation({
+    mutationFn: async (payload: { imageData: string, extractedKeywords?: string }) => {
+      try {
+        const response = await api.post<ApiResponse>('/api/price-comparison/image-search', payload);
+        console.log('RAW IMAGE SEARCH RESPONSE:', response.data);
+        return response.data;
+      } catch (error: any) {
+        console.error('Image search error:', error);
+        throw new Error(error?.response?.data?.message || error?.message || 'Unknown error occurred');
+      }
+    },
+    onMutate: () => {
+      setIsLoading(true);
+      setShowIntro(false);
+      setProducts([]);
+      setSearchPerformed(true);
+      setError(null);
+    },
+    onSuccess: (data) => {
+      if (data.success) {
+        // Get products from the correct field in the response
+        const rawProducts = data.products || data.data || data.results || [];
+        
+        if (rawProducts.length === 0) {
+          toast.error("No products found matching your image");
+          return;
+        }
+        
+        // Format the products using our helper function
+        const formattedProducts = formatProducts(rawProducts);
+        
+        // Save to both localStorage and sessionStorage
+        localStorage.setItem('searchResults', JSON.stringify(formattedProducts));
+        sessionStorage.setItem('lastSearchResults', JSON.stringify(formattedProducts));
+        sessionStorage.setItem('lastSearchQuery', 'Image search');
+        sessionStorage.setItem('searchPerformed', 'true');
+        
+        setProducts(formattedProducts);
+        setFailedRetailers(data.failedRetailers || []);
+        setScrapedRetailers(data.scrapedRetailers || []);
+        
+        toast.success(`Found ${formattedProducts.length} products matching your image`);
+      } else {
+        setError(data.message || 'Failed to process image search');
+        toast.error(data.message || 'Failed to process image search');
+      }
+    },
+    onError: (error) => {
+      console.error('Error in image search:', error);
+      setError('Error processing image. Please try again or use text search instead.');
+      toast.error('Error processing image search');
+    },
+    onSettled: () => {
+      setIsLoading(false);
+    }
+  });
+
+  // Debounced search handler
+  const debouncedSearch = useCallback(
+    debounce((query: string) => {
+      searchMutation.mutate(query);
+    }, 800),
+    // Added searchMutation to the dependency array to avoid issues with stale closures
+    [searchMutation]
+  );
+
+  // Handler for text search
+  const performSearch = (query: string) => {
+    if (query.trim().length < 2) {
+      toast.error('Please enter at least 2 characters');
+      return;
+    }
+    debouncedSearch(query);
+  };
+
+  // Handler for image search
+  const handleImageSearch = (imageData: string, extractedKeywords?: string) => {
+    imageSearchMutation.mutate({ imageData, extractedKeywords });
+  };
+
+  // Handler for product selection
+  const handleProductSelect = (product: ProductData) => {
+    // Save current search state
+    sessionStorage.setItem("lastSearchQuery", lastQuery);
+    sessionStorage.setItem("lastSearchResults", JSON.stringify(products));
+    sessionStorage.setItem("searchPerformed", "true");
+    
+    // Navigate to product details
+    navigate(`/product/${product.id}`, {
+      state: { 
+        product,
+        fromSearch: true,
+        query: lastQuery
+      }
+    });
+  };
+
+  // Button handler to scroll to section
+  const scrollToSection = (sectionId: string) => {
+    const element = document.getElementById(sectionId);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
+    }
   };
 
   // Features data
@@ -167,124 +487,183 @@ const Index = () => {
     }
   ];
 
-  return (
-    <div className="min-h-screen flex flex-col relative overflow-x-hidden">
-      {/* Background effects */}
-      <CyberBackground />
-      <div className="scanlines"></div>
+  // Handle search form submission
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setLastQuery(query);
+    setSearchPerformed(true);
+    setShowIntro(false);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/price-comparison', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query })
+      });
+
+      if (!response.ok) {
+        throw new Error('Search request failed');
+      }
+
+      const data = await response.json();
+      setProducts(data);
       
-      <section id="hero" className="relative">
-        <HeroParticles />
+      // Save search results and query to sessionStorage for state restoration
+      sessionStorage.setItem("lastQuery", query);
+      sessionStorage.setItem("searchResults", JSON.stringify(data));
+      
+      console.log('Search results saved to sessionStorage', data.length);
+    } catch (err) {
+      console.error('Error during search:', err);
+      setError('Failed to perform search. Please try again.');
+      setProducts([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-        <div className="flex-grow container mx-auto px-4 pb-8 relative z-10">
-          <GlitchHeader
-            title="CUMPAIR"
-            subtitle="The future of price comparison is here"
-          />
-
-          <div className={cn(
-            "max-w-4xl mx-auto mb-8 text-center transition-all duration-1000",
-            "transform opacity-0 translate-y-8",
-            { "opacity-100 translate-y-0": visibleSections.hero }
-          )}>
-            <h2 className="text-xl md:text-2xl text-cyber-blue mb-6">
-              Compare prices across multiple markets with cyberpunk style
-            </h2>
-            <p className="text-gray-400 max-w-2xl mx-auto mb-8">
-              Upload a product image or enter text to instantly compare prices from local stores and online hypermarkets. 
-              Powered by advanced AI to ensure you always get the best deal possible.
-            </p>
-
-            <div className="flex flex-col sm:flex-row justify-center gap-4">
-              <CyberButton 
-                onClick={() => document.getElementById('search-section')?.scrollIntoView({ behavior: 'smooth' })}
-                glowColor="purple"
-                icon={<ArrowRight className="h-4 w-4" />}
-              >
-                Start Comparing
-              </CyberButton>
-              
-              <CyberButton 
-                variant="outline"
-                glowColor="blue"
-                onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}
-              >
-                Learn More
-              </CyberButton>
+  return (
+    <div className="flex flex-col min-h-screen">
+      {/* Background elements removed as they're now in the global layout */}
+      
+      {/* Main content */}
+      <main className="container mx-auto px-4 py-8 relative z-10 flex-grow">
+        
+        {/* Hero particles removed as they are now part of the global layout */}
+        
+        {/* Restoration loading indicator - enhanced with animation and message */}
+        {isRestoring && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="bg-gray-900/90 border border-cyber-blue p-6 rounded-lg shadow-lg text-center max-w-md">
+              <LoadingAnimation size="lg" />
+              <h3 className="text-cyber-blue mt-4 text-xl font-bold">Restoring Your Search Results</h3>
+              <p className="text-gray-300 mt-2">Continuing where you left off...</p>
             </div>
           </div>
+        )}
+        
+        {/* Hero section */}
+        <section 
+          id="hero" 
+          className={cn(
+            "relative z-10 transition-opacity duration-1000 bg-transparent",
+            visibleSections.hero ? "opacity-100" : "opacity-0"
+          )}
+        >
+          <div className="flex-grow container mx-auto px-4 pb-8 relative z-10">
+            <GlitchHeader
+              title="CUMPAIR"
+              subtitle="The future of price comparison is here"
+            />
 
-          {/* Floating stats section */}
-          <section 
-            id="stats" 
-            className={cn(
-              "transition-all duration-1000 transform opacity-0 translate-y-8",
-              { "opacity-100 translate-y-0 delay-300": visibleSections.hero }
-            )}
-          >
-            <FloatingStats />
-          </section>
+            <div className={cn(
+              "max-w-4xl mx-auto mb-8 text-center transition-all duration-1000",
+              "transform opacity-0 translate-y-8",
+              { "opacity-100 translate-y-0": visibleSections.hero }
+            )}>
+              <h2 className="text-xl md:text-2xl text-cyber-blue mb-6">
+                Compare prices across multiple markets with cyberpunk style
+              </h2>
+              <p className="text-gray-400 max-w-2xl mx-auto mb-8">
+                Upload a product image or enter text to instantly compare prices from local stores and online hypermarkets. 
+                Powered by advanced AI to ensure you always get the best deal possible.
+              </p>
 
-          <div id="search-section" className="pt-8">
-            <InputModule onSearch={simulateSearch} />
-          </div>
-        </div>
-      </section>
-
-      {isLoading ? (
-        <LoadingAnimation />
-      ) : (
-        <>
-          {!searchPerformed ? (
-            <section id="features" className="py-16 relative">
-              <div className="circuit-pattern absolute inset-0 opacity-20"></div>
-              
-              <div className="container mx-auto px-4 relative z-10">
-                <h2 className={cn(
-                  "text-2xl md:text-3xl font-cyber text-center neon-text-blue mb-12",
-                  "transition-all duration-1000 delay-300",
-                  "opacity-0 translate-y-8",
-                  { "opacity-100 translate-y-0": visibleSections.features }
-                )}>
-                  Why Choose CUMPAIR?
-                </h2>
-                
-                <div className={cn(
-                  "grid grid-cols-1 md:grid-cols-2 gap-8",
-                  "transition-all duration-1000",
-                  "opacity-0 transform translate-y-8",
-                  { "opacity-100 translate-y-0": visibleSections.features }
-                )}>
-                  {features.map((feature, index) => (
-                    <FeatureSection
-                      key={index}
-                      icon={feature.icon}
-                      title={feature.title}
-                      description={feature.description}
-                      className={`animation-delay-${(index + 1) * 100}`}
-                    />
-                  ))}
-                </div>
-
-                {/* Code preview section */}
-                <section 
-                  id="code" 
-                  className={cn(
-                    "mt-24 max-w-4xl mx-auto glass-panel p-1 rounded-lg overflow-hidden",
-                    "transition-all duration-1000 transform",
-                    "opacity-0 translate-y-8",
-                    { "opacity-100 translate-y-0": visibleSections.code }
-                  )}
+              <div className="flex flex-col sm:flex-row justify-center gap-4">
+                <CyberButton 
+                  onClick={() => scrollToSection('search-section')}
+                  glowColor="purple"
+                  icon={<ArrowRight className="h-4 w-4" />}
                 >
-                  <div className="bg-cyber-dark/90 p-4 rounded-lg overflow-hidden w-full">
-                    <div className="flex items-center mb-2 border-b border-white/10 pb-2">
-                      <div className="w-3 h-3 rounded-full bg-red-500 mr-2"></div>
-                      <div className="w-3 h-3 rounded-full bg-yellow-500 mr-2"></div>
-                      <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                      <span className="ml-3 text-sm text-gray-400">Live Price Comparison</span>
-                    </div>
-                    <pre className="text-xs md:text-sm text-left overflow-auto p-2 font-mono text-gray-300 cyber-lines">
-                      <code>{`// CUMPAIR price analysis
+                  Start Comparing
+                </CyberButton>
+                
+                <CyberButton 
+                  variant="outline"
+                  glowColor="blue"
+                  onClick={() => scrollToSection('features')}
+                >
+                  Learn More
+                </CyberButton>
+              </div>
+            </div>
+
+            {/* Floating stats section */}
+            <section 
+              id="stats" 
+              className={cn(
+                "transition-all duration-1000 transform opacity-0 translate-y-8",
+                { "opacity-100 translate-y-0 delay-300": visibleSections.hero }
+              )}
+            >
+              <FloatingStats />
+            </section>
+
+            <div id="search-section" className="pt-8">
+              <InputModule 
+                onSearch={performSearch}
+                onImageSearch={handleImageSearch} 
+              />
+            </div>
+          </div>
+        </section>
+
+        {isLoading || isRestoring ? (
+          <LoadingAnimation />
+        ) : (
+          <>
+            {!searchPerformed ? (
+              <section id="features" className="py-16 relative">
+                <div className="circuit-pattern absolute inset-0 opacity-20"></div>
+                
+                <div className="container mx-auto px-4 relative z-10">
+                  <h2 className={cn(
+                    "text-2xl md:text-3xl font-cyber text-center neon-text-blue mb-12",
+                    "transition-all duration-1000 delay-300",
+                    "opacity-0 translate-y-8",
+                    { "opacity-100 translate-y-0": visibleSections.features }
+                  )}>
+                    Why Choose CUMPAIR?
+                  </h2>
+                  
+                  <div className={cn(
+                    "grid grid-cols-1 md:grid-cols-2 gap-8",
+                    "transition-all duration-1000",
+                    "opacity-0 transform translate-y-8",
+                    { "opacity-100 translate-y-0": visibleSections.features }
+                  )}>
+                    {features.map((feature, index) => (
+                      <FeatureSection
+                        key={index}
+                        icon={feature.icon}
+                        title={feature.title}
+                        description={feature.description}
+                        className={`animation-delay-${(index + 1) * 100}`}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Code preview section */}
+                  <section 
+                    id="code" 
+                    className={cn(
+                      "mt-24 max-w-4xl mx-auto glass-panel p-1 rounded-lg overflow-hidden",
+                      "transition-all duration-1000 transform",
+                      "opacity-0 translate-y-8",
+                      { "opacity-100 translate-y-0": visibleSections.code }
+                    )}
+                  >
+                    <div className="bg-cyber-dark/90 p-4 rounded-lg overflow-hidden w-full">
+                      <div className="flex items-center mb-2 border-b border-white/10 pb-2">
+                        <div className="w-3 h-3 rounded-full bg-red-500 mr-2"></div>
+                        <div className="w-3 h-3 rounded-full bg-yellow-500 mr-2"></div>
+                        <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                        <span className="ml-3 text-sm text-gray-400">Live Price Comparison</span>
+                      </div>
+                      <pre className="text-xs md:text-sm text-left overflow-auto p-2 font-mono text-gray-300 cyber-lines">
+                        <code>{`// CUMPAIR price analysis
 import { compareAllPrices } from "@cumpair/core";
 
 const result = await compareAllPrices({
@@ -296,102 +675,174 @@ const result = await compareAllPrices({
 
 console.log(\`Best deal: \${result.bestDeal.seller} - \${result.bestDeal.price}\`);
 console.log(\`Lowest price: \${result.lowestPrice.seller} - \${result.lowestPrice.price}\`);`}</code>
-                    </pre>
-                  </div>
-                </section>
-
-                {/* API Integration Section */}
-                <section
-                  id="api"
-                  className={cn(
-                    "mt-24 max-w-4xl mx-auto",
-                    "transition-all duration-1000 transform",
-                    "opacity-0 translate-y-8",
-                    { "opacity-100 translate-y-0": visibleSections.api }
-                  )}
-                >
-                  <h2 className="text-2xl md:text-3xl font-cyber text-center neon-text-blue mb-8">
-                    Powered by Advanced Tech
-                  </h2>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="glassmorphism-panel p-6 rounded-lg relative overflow-hidden group">
-                      <div className="data-flow absolute left-0 top-0 h-full"></div>
-                      <div className="absolute inset-0 bg-gradient-to-r from-cyber-blue/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                      <div className="relative z-10">
-                        <div className="flex items-center mb-4">
-                          <Code className="h-8 w-8 text-cyber-purple mr-3" />
-                          <h3 className="text-lg md:text-xl font-cyber text-cyber-purple">
-                            AI-Powered Scraping
-                          </h3>
-                        </div>
-                        <p className="text-gray-400 text-sm md:text-base mb-4">
-                          Our system uses advanced AI models to extract accurate pricing data from any website, even those with complex anti-scraping measures.
-                        </p>
-                        <div className="flex items-center text-cyber-blue text-sm">
-                          <span>Technical details</span>
-                          <ChevronsRight className="h-4 w-4 ml-1" />
-                        </div>
-                      </div>
+                      </pre>
                     </div>
-                    
-                    <div className="glassmorphism-panel p-6 rounded-lg relative overflow-hidden group">
-                      <div className="data-flow absolute left-0 top-0 h-full"></div>
-                      <div className="absolute inset-0 bg-gradient-to-r from-cyber-pink/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                      <div className="relative z-10">
-                        <div className="flex items-center mb-4">
-                          <ExternalLink className="h-8 w-8 text-cyber-green mr-3" />
-                          <h3 className="text-lg md:text-xl font-cyber text-cyber-green">
-                            Multimodal API
-                          </h3>
-                        </div>
-                        <p className="text-gray-400 text-sm md:text-base mb-4">
-                          Our API connects to over 50 sources including local stores, hypermarkets, and exclusive deals not available to the public.
-                        </p>
-                        <div className="flex items-center text-cyber-blue text-sm">
-                          <span>API documentation</span>
-                          <ChevronsRight className="h-4 w-4 ml-1" />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </section>
+                  </section>
 
-                {/* Final CTA */}
-                <section
-                  id="cta"
-                  className={cn(
-                    "mt-24 max-w-3xl mx-auto text-center mb-20",
-                    "transition-all duration-1000 transform",
-                    "opacity-0 translate-y-8",
-                    { "opacity-100 translate-y-0": visibleSections.cta }
-                  )}
-                >
-                  <div className="neon-border-glow p-8 rounded-lg bg-cyber-dark/30">
-                    <h2 className="text-3xl md:text-4xl font-cyber mb-4 animate-neon-pulse">
-                      Ready to find the best deals?
+                  {/* API Integration Section */}
+                  <section
+                    id="api"
+                    className={cn(
+                      "mt-24 max-w-4xl mx-auto",
+                      "transition-all duration-1000 transform",
+                      "opacity-0 translate-y-8",
+                      { "opacity-100 translate-y-0": visibleSections.api }
+                    )}
+                  >
+                    <h2 className="text-2xl md:text-3xl font-cyber text-center neon-text-blue mb-8">
+                      Powered by Advanced Tech
                     </h2>
-                    <p className="text-gray-300 mb-8 max-w-xl mx-auto">
-                      Start searching now and discover prices from across the web in seconds. Upload a photo or type what you're looking for.
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                      <div className="glassmorphism-panel p-6 rounded-lg relative overflow-hidden group">
+                        <div className="data-flow absolute left-0 top-0 h-full"></div>
+                        <div className="absolute inset-0 bg-gradient-to-r from-cyber-blue/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                        <div className="relative z-10">
+                          <div className="flex items-center mb-4">
+                            <Code className="h-8 w-8 text-cyber-purple mr-3" />
+                            <h3 className="text-lg md:text-xl font-cyber text-cyber-purple">
+                              AI-Powered Scraping
+                            </h3>
+                          </div>
+                          <p className="text-gray-400 text-sm md:text-base mb-4">
+                            Our system uses advanced AI models to extract accurate pricing data from any website, even those with complex anti-scraping measures.
+                          </p>
+                          <div className="flex items-center text-cyber-blue text-sm">
+                            <span>Technical details</span>
+                            <ChevronsRight className="h-4 w-4 ml-1" />
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="glassmorphism-panel p-6 rounded-lg relative overflow-hidden group">
+                        <div className="data-flow absolute left-0 top-0 h-full"></div>
+                        <div className="absolute inset-0 bg-gradient-to-r from-cyber-pink/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                        <div className="relative z-10">
+                          <div className="flex items-center mb-4">
+                            <ExternalLink className="h-8 w-8 text-cyber-green mr-3" />
+                            <h3 className="text-lg md:text-xl font-cyber text-cyber-green">
+                              Multimodal API
+                            </h3>
+                          </div>
+                          <p className="text-gray-400 text-sm md:text-base mb-4">
+                            Our API connects to over 50 sources including local stores, hypermarkets, and exclusive deals not available to the public.
+                          </p>
+                          <div className="flex items-center text-cyber-blue text-sm">
+                            <span>API documentation</span>
+                            <ChevronsRight className="h-4 w-4 ml-1" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Final CTA */}
+                  <section
+                    id="cta"
+                    className={cn(
+                      "mt-24 max-w-3xl mx-auto text-center mb-20",
+                      "transition-all duration-1000 transform",
+                      "opacity-0 translate-y-8",
+                      { "opacity-100 translate-y-0": visibleSections.cta }
+                    )}
+                  >
+                    <div className="neon-border-glow p-8 rounded-lg bg-cyber-dark/30">
+                      <h2 className="text-3xl md:text-4xl font-cyber mb-4 animate-neon-pulse">
+                        Ready to find the best deals?
+                      </h2>
+                      <p className="text-gray-300 mb-8 max-w-xl mx-auto">
+                        Start searching now and discover prices from across the web in seconds. Upload a photo or type what you're looking for.
+                      </p>
+                      <CyberButton 
+                        onClick={() => scrollToSection('search-section')}
+                        glowColor="pink"
+                        className="px-8 py-4"
+                      >
+                        Compare Prices Now
+                      </CyberButton>
+                    </div>
+                  </section>
+                </div>
+              </section>
+            ) : (
+              <div className="container mx-auto px-4 mt-6">
+                {isRestoring && (
+                  <div className="w-full flex flex-col items-center justify-center p-8 mb-6 bg-gradient-to-r from-blue-900/40 to-purple-900/40 rounded-lg border border-cyan-500/50 shadow-lg shadow-cyan-500/20">
+                    <LoadingAnimation size="medium" />
+                    <p className="mt-4 text-lg text-cyber-blue animate-pulse">Restoring your previous search results...</p>
+                    <p className="text-sm text-gray-400 mt-2">Picking up right where you left off</p>
+                  </div>
+                )}
+
+                {isRestoring ? (
+                  <div className="flex flex-col items-center justify-center py-10">
+                    <LoadingAnimation size="md" />
+                    <p className="text-cyan-400 mt-4 text-center animate-pulse">
+                      Restoring your previous search results...
                     </p>
-                    <CyberButton 
-                      onClick={() => document.getElementById('search-section')?.scrollIntoView({ behavior: 'smooth' })}
-                      glowColor="pink"
-                      className="px-8 py-4"
+                  </div>
+                ) : isLoading ? (
+                  <div className="flex flex-col items-center justify-center py-10">
+                    <LoadingAnimation />
+                    <p className="text-cyan-400 mt-4">Searching across multiple retailers...</p>
+                    {/* Rest of loading content */}
+                  </div>
+                ) : error ? (
+                  <div className="max-w-xl mx-auto bg-red-900/20 border border-red-500 p-4 rounded-lg text-center">
+                    <h3 className="text-xl font-bold text-red-400 mb-2">Error</h3>
+                    <p className="text-red-200">{error}</p>
+                    <CyberButton
+                      variant="outline"
+                      size="sm"
+                      glowColor="red"
+                      className="mt-4"
+                      onClick={() => {
+                        setSearchPerformed(false);
+                        setShowIntro(true);
+                        setError(null);
+                      }}
                     >
-                      Compare Prices Now
+                      Back to Search
                     </CyberButton>
                   </div>
-                </section>
+                ) : products.length > 0 ? (
+                  <div className="pt-4 pb-10">
+                    <h2 className="text-2xl font-bold mb-4 text-cyan-100">
+                      {products.length} Results for "{lastQuery}"
+                    </h2>
+                    
+                    {/* Product grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {products.map((product) => (
+                        <DataCard 
+                          key={product.id || Math.random().toString()} 
+                          product={product} 
+                          onSelect={handleProductSelect}
+                        />
+                      ))}
+                    </div>
+                    
+                    {/* No results message */}
+                    {products.length === 0 && (
+                      <div className="text-center py-10">
+                        <AlertCircle className="mx-auto h-12 w-12 text-red-400" />
+                        <p className="mt-4 text-xl text-gray-300">No products found. Try a different search term.</p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-10">
+                    <AlertCircle className="mx-auto h-12 w-12 text-red-400" />
+                    <p className="mt-4 text-xl text-gray-300">No products found. Try a different search term.</p>
+                  </div>
+                )}
               </div>
-            </section>
-          ) : (
-            <AnimatedGrid products={products} />
-          )}
-        </>
-      )}
+            )}
+          </>
+        )}
 
-      <Footer />
+        <Footer />
+      </main>
     </div>
   );
 };

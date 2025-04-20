@@ -21,11 +21,16 @@ router.post('/search', async (req, res) => {
     
     const results = await scraperService.searchProduct(query);
     
+    // Extract products array and metadata from results object
+    const { products, failedRetailers, scrapedRetailers, count } = results;
+    
     return res.json({
       success: true,
       query,
-      count: results.length,
-      data: results
+      count,
+      products, // Send the products array directly in the response
+      failedRetailers,
+      scrapedRetailers
     });
   } catch (error) {
     console.error('Error in product search:', error);
@@ -50,10 +55,17 @@ router.post('/image-search', async (req, res) => {
     if (keywords) {
       const results = await scraperService.scrapeProductsByKeywords(keywords);
       
+      // Extract products array and metadata from results object
+      const { products, failedRetailers, scrapedRetailers, count } = results;
+      
       return res.json({
         success: true,
         source: 'user keywords',
-        ...results
+        query: keywords,
+        count,
+        products,
+        failedRetailers,
+        scrapedRetailers
       });
     }
     

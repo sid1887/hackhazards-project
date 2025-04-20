@@ -1,19 +1,46 @@
-
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 
 const HeroParticles = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animationRef = useRef<number>();
+  const particlesArrayRef = useRef<{
+    x: number;
+    y: number;
+    size: number;
+    speedX: number;
+    speedY: number;
+    color: string;
+  }[]>([]);
   
-  useEffect(() => {
+  // Memoized function to set canvas size
+  const setCanvasSize = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
-    canvas.width = window.innerWidth;
-    canvas.height = 600;
+    // Use window dimensions for full-page coverage
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const dpr = window.devicePixelRatio || 1;
     
+    // Set display size (CSS)
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    
+    // Set actual canvas size in pixels
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+    
+    // Scale context to match DPI
+    ctx.scale(dpr, dpr);
+    
+    return { ctx, width, height, dpr };
+  }, []);
+  
+  // Create particles function
+  const createParticles = useCallback((width: number, height: number) => {
     const particlesArray: {
       x: number;
       y: number;
@@ -30,29 +57,41 @@ const HeroParticles = () => {
       'rgba(0, 150, 199, 0.2)', // another blue tone
     ];
     
-    // Create particles
-    const createParticles = () => {
-      const particleCount = Math.min(window.innerWidth / 20, 30); // Reduced particle count
+    // Scale particle count with viewport size
+    const particleCount = Math.min(Math.floor((width * height) / 20000), 50);
+    
+    for (let i = 0; i < particleCount; i++) {
+      const size = Math.random() * 2 + 0.5; // Smaller particles
+      const x = Math.random() * width;
+      const y = Math.random() * height;
+      const speedX = Math.random() * 0.3 - 0.15; // Slower movement
+      const speedY = Math.random() * 0.3 - 0.15; // Slower movement
+      const color = colors[Math.floor(Math.random() * colors.length)];
       
-      for (let i = 0; i < particleCount; i++) {
-        const size = Math.random() * 2 + 0.5; // Smaller particles
-        const x = Math.random() * canvas.width;
-        const y = Math.random() * canvas.height;
-        const speedX = Math.random() * 0.3 - 0.15; // Slower movement
-        const speedY = Math.random() * 0.3 - 0.15; // Slower movement
-        const color = colors[Math.floor(Math.random() * colors.length)];
-        
-        particlesArray.push({
-          x, y, size, speedX, speedY, color
-        });
-      }
-    };
+      particlesArray.push({
+        x, y, size, speedX, speedY, color
+      });
+    }
+    
+    particlesArrayRef.current = particlesArray;
+    return particlesArray;
+  }, []);
+  
+  useEffect(() => {
+    // Initial setup
+    const setup = setCanvasSize();
+    if (!setup) return;
+    
+    const { ctx, width, height } = setup;
+    let particlesArray = createParticles(width, height);
     
     // Animate particles
     const animate = () => {
+      if (!ctx) return;
+      
       // Semi-transparent clearing for subtle trailing effect
       ctx.fillStyle = 'rgba(15, 15, 15, 0.2)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(0, 0, width, height);
       
       for (let i = 0; i < particlesArray.length; i++) {
         const p = particlesArray[i];
@@ -66,11 +105,11 @@ const HeroParticles = () => {
         p.y += p.speedY;
         
         // Bounce particles off edges
-        if (p.x < 0 || p.x > canvas.width) {
+        if (p.x < 0 || p.x > width) {
           p.speedX = -p.speedX;
         }
         
-        if (p.y < 0 || p.y > canvas.height) {
+        if (p.y < 0 || p.y > height) {
           p.speedY = -p.speedY;
         }
         
@@ -93,31 +132,58 @@ const HeroParticles = () => {
         }
       }
       
-      requestAnimationFrame(animate);
+      animationRef.current = requestAnimationFrame(animate);
     };
     
     // Handle resize
     const handleResize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = 600;
-      particlesArray.length = 0;
-      createParticles();
+      const newSetup = setCanvasSize();
+      if (!newSetup) return;
+      
+      const { width, height } = newSetup;
+      particlesArray = createParticles(width, height);
     };
     
-    createParticles();
+    // Handle visibility change to pause/resume animation
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Page is hidden, cancel animation to save resources
+        if (animationRef.current) {
+          cancelAnimationFrame(animationRef.current);
+          animationRef.current = undefined;
+        }
+      } else {
+        // Page is visible again, resume animation
+        if (!animationRef.current) {
+          animationRef.current = requestAnimationFrame(animate);
+        }
+      }
+    };
+    
+    // Start the animation
     animate();
     
+    // Add event listeners
     window.addEventListener('resize', handleResize);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     
+    // Cleanup
     return () => {
       window.removeEventListener('resize', handleResize);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
     };
-  }, []);
+  }, [setCanvasSize, createParticles]);
   
   return (
     <canvas 
       ref={canvasRef} 
-      className="absolute top-0 left-0 w-full h-[600px] pointer-events-none opacity-60" 
+      className="w-full h-full"
+      style={{ width: '100%', height: '100%', display: 'block' }}
+      aria-hidden="true"
     />
   );
 };

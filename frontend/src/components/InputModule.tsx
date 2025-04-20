@@ -1,27 +1,48 @@
-
 import React, { useState } from 'react';
-import { Search, Upload, X, Sparkles } from 'lucide-react';
+import { Search, Upload, X, Sparkles, Image as ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import CyberButton from '@/components/CyberButton';
+import { toast } from 'sonner';
 
 interface InputModuleProps {
   onSearch?: (query: string) => void;
+  onImageSearch?: (imageData: string, extractedKeywords?: string) => void;
+  isSearching?: boolean;
 }
 
-const InputModule: React.FC<InputModuleProps> = ({ onSearch }) => {
+const InputModule: React.FC<InputModuleProps> = ({ 
+  onSearch, 
+  onImageSearch,
+  isSearching = false 
+}) => {
   const [query, setQuery] = useState('');
   const [image, setImage] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
+  const [extractedKeywords, setExtractedKeywords] = useState<string>('');
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      
+      // Check file size (limit to 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('Image size exceeds 5MB limit. Please choose a smaller image.');
+        return;
+      }
+      
+      // Check file type
+      if (!file.type.startsWith('image/')) {
+        toast.error('Please select a valid image file.');
+        return;
+      }
+      
       setImage(file);
       setPreviewUrl(URL.createObjectURL(file));
+      toast.success('Image uploaded successfully');
     }
   };
 
@@ -31,13 +52,29 @@ const InputModule: React.FC<InputModuleProps> = ({ onSearch }) => {
       URL.revokeObjectURL(previewUrl);
       setPreviewUrl(null);
     }
+    setExtractedKeywords('');
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Search query:', query);
-    console.log('Image:', image);
-    // Call the onSearch callback if provided
+    
+    // If there's an image, process image search
+    if (image && previewUrl && onImageSearch) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64data = reader.result as string;
+        onImageSearch(base64data, extractedKeywords || undefined);
+      };
+      reader.readAsDataURL(image);
+      return;
+    }
+    
+    // Otherwise, process text search
+    if (query.trim().length < 2) {
+      toast.error('Please enter at least 2 characters');
+      return;
+    }
+    
     if (onSearch) {
       onSearch(query);
     }
@@ -80,9 +117,9 @@ const InputModule: React.FC<InputModuleProps> = ({ onSearch }) => {
           <div 
             className={cn(
               'absolute inset-0 rounded-lg transition-all duration-500',
-              'bg-gradient-to-r from-cyber-purple/30 via-cyber-blue/30 to-cyber-pink/30 bg-[length:200%_200%]',
-              'animate-rotate-gradient blur opacity-50',
-              isInputFocused ? 'opacity-80' : 'opacity-40'
+              'bg-gradient-to-r from-cyber-purple/20 via-cyber-blue/20 to-cyber-pink/20 bg-[length:200%_200%]',
+              'animate-rotate-gradient blur opacity-30',
+              isInputFocused ? 'opacity-50' : 'opacity-20'
             )}
           ></div>
           <div className="relative flex gap-3">
@@ -115,12 +152,21 @@ const InputModule: React.FC<InputModuleProps> = ({ onSearch }) => {
             <CyberButton 
               type="submit"
               glowColor="blue"
+              disabled={isSearching}
               className={cn(
                 'h-14 px-8 bg-cyber-blue/90 hover:bg-cyber-blue text-white',
                 'backdrop-blur-md transition-all duration-300 border border-white/10',
+                isSearching ? 'opacity-70 cursor-not-allowed' : ''
               )}
             >
-              Compare
+              {isSearching ? (
+                <>
+                  <span className="animate-pulse mr-2">Searching</span>
+                  <div className="w-4 h-4 rounded-full border-2 border-t-transparent border-white animate-spin"></div>
+                </>
+              ) : (
+                image ? 'Search by Image' : 'Compare'
+              )}
             </CyberButton>
           </div>
         </div>
@@ -129,7 +175,7 @@ const InputModule: React.FC<InputModuleProps> = ({ onSearch }) => {
         <div className="relative">
           <div className={cn(
             "glassmorphism-panel-intense h-48 rounded-xl overflow-hidden",
-            "border-2 border-dashed transition-all duration-300 bg-cyber-dark/50",
+            "border-2 border-dashed transition-all duration-300 bg-cyber-dark/30",
             "hover:border-pink-500/40 hover:shadow-[0_0_25px_rgba(236,72,153,0.2),_0_0_40px_rgba(59,130,246,0.15)]",
             isDragActive ? "border-pink-500/60 shadow-[0_0_30px_rgba(236,72,153,0.3),_0_0_50px_rgba(59,130,246,0.2)]" : ""
           )}

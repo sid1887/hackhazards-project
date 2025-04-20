@@ -1,9 +1,14 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  html, body, #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+  
   body {
     @apply bg-cyber-darker text-cyber-text selection:bg-cyber-primary/30 selection:text-white;
     background-image: 
@@ -158,5 +163,19 @@
   
   @keyframes shimmer {
     100% { transform: translateX(100%); }
+  }
+
+  /* Highlight effect for products when returning from details */
+  @keyframes highlight-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+    70% { box-shadow: 0 0 0 15px rgba(236, 72, 153, 0.2); }
+    100% { box-shadow: 0 0 0 0 rgba(236, 72, 153, 0); }
+  }
+
+  .highlight-card {
+    animation: highlight-pulse 2s ease-out;
+    z-index: 10;
+    border: 2px solid #3e98ff !important;
+    transition: all 0.3s ease;
   }
 }

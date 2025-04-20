@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 
@@ -29,9 +28,7 @@ const GlitchHeader: React.FC<GlitchHeaderProps> = ({
 
   return (
     <header className={cn('text-center py-12 md:py-16 relative', className)}>
-      <div className="absolute top-0 left-0 w-full h-full z-0 opacity-10">
-        <div className="dot-pattern"></div>
-      </div>
+      {/* Removed dot-pattern div that created texture */}
       
       <div className="relative z-10">
         <div className="relative">
@@ -62,9 +59,7 @@ const GlitchHeader: React.FC<GlitchHeaderProps> = ({
         )}
       </div>
 
-      {/* Subtle background lighting effects */}
-      <div className="absolute -top-10 -left-10 w-64 h-64 bg-cyber-primary/5 rounded-full blur-3xl"></div>
-      <div className="absolute -bottom-10 -right-10 w-64 h-64 bg-cyber-accent/5 rounded-full blur-3xl"></div>
+      {/* Removed blur-3xl background lighting effects */}
     </header>
   );
 };
