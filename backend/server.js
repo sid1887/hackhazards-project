@@ -1,6 +1,11 @@
+/**
+ * Enhanced Price Comparison Backend Server
+ * With optimized scraping strategies and resource management
+ */
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const { cpus } = require('os');
 const morgan = require('morgan');
 const dotenv = require('dotenv');
 const fs = require('fs');
@@ -19,17 +24,25 @@ if (process.env.MONGO_URI) {
 }
 
 // Import routes
-const groqApiRoutes = require('./routes/groqApi');
 const priceComparisonRoutes = require('./routes/priceComparison');
+const groqApiRoutes = require('./routes/groqApi');
 
-// Initialize express app
+// Import services
+const scraperService = require('./scraper/scraperService');
+
+// Create Express app
 const app = express();
+const PORT = process.env.PORT || 5000;
 
-// Set up middleware
+// Performance configuration
+const WORKER_COUNT = Math.max(1, Math.min(cpus().length - 1, 4)); // Use all cores minus one, max 4
+console.log(`Server configured to use ${WORKER_COUNT} worker threads for scraping`);
+
+// Middleware
 app.use(morgan('dev')); // Logging
-app.use(cors()); // Enable CORS
-app.use(express.json({ limit: '50mb' })); // Parse JSON bodies (with increased limit for images)
-app.use(express.urlencoded({ extended: true, limit: '50mb' })); // Parse URL-encoded bodies
+app.use(cors());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Create uploads directory if it doesn't exist
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -37,7 +50,7 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Static files for uploads (with appropriate security headers)
+// Serve static files from uploads directory
 app.use('/uploads', (req, res, next) => {
   res.setHeader('Content-Security-Policy', "default-src 'self'");
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -45,8 +58,8 @@ app.use('/uploads', (req, res, next) => {
 }, express.static(uploadsDir));
 
 // API routes
-app.use('/api/groq', groqApiRoutes);
 app.use('/api/price-comparison', priceComparisonRoutes);
+app.use('/api/groq', groqApiRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -57,34 +70,93 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error('Server error:', err);
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || 'An unexpected error occurred',
-    error: process.env.NODE_ENV === 'production' ? {} : err.stack
+// Debug info endpoint
+app.get('/debug-info', (req, res) => {
+  res.json({
+    nodeVersion: process.version,
+    platform: process.platform,
+    arch: process.arch,
+    cpus: cpus().length,
+    memory: process.memoryUsage(),
+    uptime: process.uptime()
   });
 });
 
-// Set port
-const PORT = process.env.PORT || 5000;
-
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`API available at http://localhost:${PORT}/api`);
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  res.status(err.status || 500).json({
+    success: false,
+    message: 'Server error',
+    error: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message
+  });
 });
 
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (err) => {
-  console.error('Unhandled Rejection:', err);
-});
+// Initialize server with proper shutdown handling
+let server;
 
-// Handle uncaught exceptions
-process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err);
-  process.exit(1);
-});
+// Function to initialize the server
+async function initializeServer() {
+  try {
+    // Initialize scraper service
+    console.log('Initializing scraper service...');
+    await scraperService.initializeBrowsers();
+    
+    // Start the server
+    server = app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+      console.log(`API available at http://localhost:${PORT}/api`);
+    });
+    
+    // Handle graceful shutdown
+    setupGracefulShutdown(server);
+  } catch (error) {
+    console.error('Failed to initialize server:', error);
+    process.exit(1);
+  }
+}
+
+// Handle graceful shutdown
+function setupGracefulShutdown(server) {
+  // Handle process termination signals
+  ['SIGINT', 'SIGTERM', 'SIGHUP'].forEach((signal) => {
+    process.on(signal, async () => {
+      console.log(`\nReceived ${signal}, shutting down gracefully...`);
+      
+      // Close HTTP server first to stop accepting new requests
+      server.close(() => {
+        console.log('HTTP server closed.');
+      });
+      
+      try {
+        // Clean up all resources
+        console.log('Cleaning up resources...');
+        await scraperService.cleanup();
+        console.log('All resources cleaned up successfully');
+        
+        // Exit process
+        console.log('Server shutdown complete');
+        process.exit(0);
+      } catch (error) {
+        console.error('Error during graceful shutdown:', error);
+        process.exit(1);
+      }
+    });
+  });
+
+  // Handle unhandled errors and rejections to prevent crashes
+  process.on('uncaughtException', (error) => {
+    console.error('Uncaught exception:', error);
+    // Don't exit immediately, try to keep the server running
+  });
+
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled rejection at:', promise, 'reason:', reason);
+    // Don't exit immediately, try to keep the server running
+  });
+}
+
+// Initialize
+initializeServer();
 
 module.exports = app;

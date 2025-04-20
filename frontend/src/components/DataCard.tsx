@@ -26,15 +26,16 @@ export interface ProductData {
 
 interface DataCardProps {
   product: ProductData;
-  index: number;
+  index?: number;
+  onSelect?: (product: ProductData) => void;
 }
 
-const DataCard: React.FC<DataCardProps> = ({ product, index }) => {
+const DataCard: React.FC<DataCardProps> = ({ product, index, onSelect }) => {
   const navigate = useNavigate();
   const [isHovered, setIsHovered] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   
-  const animationDelay = `${index * 100}ms`;
+  const animationDelay = `${index ? index * 100 : 0}ms`;
   
   // Generate a unique ID if none exists
   const productId = product.id || `product-${index}-${Date.now()}`;
@@ -113,6 +114,11 @@ const DataCard: React.FC<DataCardProps> = ({ product, index }) => {
         fromDetails: true
       }
     });
+
+    // Trigger onSelect callback if provided
+    if (onSelect) {
+      onSelect(normalizedProduct);
+    }
   };
   
   // Prevent event propagation for buttons

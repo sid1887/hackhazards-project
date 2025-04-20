@@ -1,303 +1,230 @@
+/**
+ * Enhanced Price Comparison API
+ * Provides product search across multiple retailers with optimized scraping strategies
+ */
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const { promisify } = require('util');
 const scraperService = require('../scraper/scraperService');
+const directApiService = require('../scraper/directApiService');
 const groqService = require('../services/groqService');
 
+// Configure multer storage for image uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../uploads');
+    // Create directory if it doesn't exist
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    // Generate unique filename
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, 'product-image-' + uniqueSuffix + ext);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    // Accept only image files
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'));
+    }
+  }
+});
+
+// Helper to convert file to base64
+const fileToBase64 = async (filePath) => {
+  const readFile = promisify(fs.readFile);
+  const data = await readFile(filePath);
+  return data.toString('base64');
+};
+
 /**
- * @route   POST api/price-comparison/search
- * @desc    Search for a product across multiple retailers
- * @access  Public
+ * Text search endpoint
+ * Performs product search with fallbacks and parallelization
  */
 router.post('/search', async (req, res) => {
   try {
+    // Get search query
     const { query } = req.body;
     
-    if (!query) {
+    if (!query || typeof query !== 'string' || query.trim().length < 2) {
       return res.status(400).json({
         success: false,
-        message: 'Search query is required'
+        message: 'Please provide a valid search query (minimum 2 characters)'
       });
     }
     
-    const results = await scraperService.searchProduct(query);
+    console.log(`Received search request for "${query}"`);
+    const startTime = Date.now();
     
-    // Extract products array and metadata from results object
-    const { products, failedRetailers, scrapedRetailers, count } = results;
+    // First try with direct API service (fastest method)
+    try {
+      console.log('Trying direct API approach...');
+      const apiResults = await directApiService.searchProducts(query);
+      
+      if (apiResults.success && apiResults.products && apiResults.products.length > 0) {
+        const endTime = Date.now();
+        console.log(`Direct API search found ${apiResults.products.length} products in ${(endTime - startTime) / 1000}s`);
+        
+        return res.json({
+          ...apiResults,
+          executionTime: endTime - startTime
+        });
+      } else {
+        console.log('Direct API approach did not find enough results, trying scraper service...');
+      }
+    } catch (error) {
+      console.warn('Direct API error:', error.message);
+      // Continue to scraper method
+    }
     
-    return res.json({
-      success: true,
-      query,
-      count,
-      products, // Send the products array directly in the response
-      failedRetailers,
-      scrapedRetailers
-    });
+    // Fall back to full scraper service
+    try {
+      console.log('Using full scraper service...');
+      const results = await scraperService.searchProduct(query);
+      
+      const endTime = Date.now();
+      const executionTime = endTime - startTime;
+      
+      console.log(`Search completed in ${executionTime / 1000}s, found ${results.count} products`);
+      
+      // Return the results
+      return res.json({
+        ...results,
+        executionTime
+      });
+    } catch (error) {
+      console.error('Scraper error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error performing search',
+        error: error.message
+      });
+    }
   } catch (error) {
-    console.error('Error in product search:', error);
+    console.error('Search endpoint error:', error);
     return res.status(500).json({
       success: false,
-      message: 'Error searching for products',
+      message: 'Server error',
       error: error.message
     });
   }
 });
 
 /**
- * @route   POST api/price-comparison/image-search
- * @desc    Search products based on image analysis
- * @access  Public
+ * Image search endpoint
+ * Extracts product info from image and searches for matching products
  */
-router.post('/image-search', async (req, res) => {
+router.post('/image-search', upload.single('image'), async (req, res) => {
   try {
-    const { imageData, keywords } = req.body;
-    
-    // If user provided both image and keywords, prioritize keywords
-    if (keywords) {
-      const results = await scraperService.scrapeProductsByKeywords(keywords);
-      
-      // Extract products array and metadata from results object
-      const { products, failedRetailers, scrapedRetailers, count } = results;
-      
-      return res.json({
-        success: true,
-        source: 'user keywords',
-        query: keywords,
-        count,
-        products,
-        failedRetailers,
-        scrapedRetailers
+    // Check if file was uploaded
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No image file provided'
       });
     }
     
-    // If no explicit keywords but image is provided in base64
-    if (imageData) {
-      // Process the image with Groq Vision
-      const base64Image = imageData.replace(/^data:image\/\w+;base64,/, '');
+    console.log('Received image search request');
+    const startTime = Date.now();
+    const imagePath = req.file.path;
+    
+    try {
+      // Convert image to base64
+      const imageBase64 = await fileToBase64(imagePath);
       
-      // Save image to temp file for processing
-      const fs = require('fs');
-      const path = require('path');
-      const tempFilePath = path.join(__dirname, '../uploads', `temp-${Date.now()}.jpg`);
+      // Extract keywords from image using GROQ if available
+      let extractedKeywords = req.body.extractedKeywords || '';
       
-      fs.writeFileSync(tempFilePath, Buffer.from(base64Image, 'base64'));
-      
-      // Process the image using Groq Vision
-      const identificationResult = await groqService.identifyProductFromImage(tempFilePath);
-      
-      // Clean up temp file
-      try { fs.unlinkSync(tempFilePath); } catch (e) { console.error('Error deleting temp file:', e); }
-      
-      if (!identificationResult.success) {
-        return res.status(400).json({
-          success: false,
-          message: 'Failed to identify product from the image',
-          error: identificationResult.error || 'Unknown error',
-          suggestion: identificationResult.suggestion
-        });
+      // If no keywords provided and GROQ is available, extract them
+      if (!extractedKeywords && groqService) {
+        try {
+          console.log('Extracting keywords from image using GROQ...');
+          extractedKeywords = await groqService.extractProductInfoFromImage(imageBase64);
+          console.log('Extracted keywords:', extractedKeywords);
+        } catch (err) {
+          console.warn('GROQ keyword extraction failed:', err.message);
+          // Continue with empty keywords, fall back to image-only search
+        }
       }
       
-      // Extract keywords for search
-      const { productData } = identificationResult;
-      const searchKeywords = productData.keywords || productData.product;
+      // Perform search based on image and/or extracted keywords
+      const results = await scraperService.searchProductByImage(imageBase64, extractedKeywords);
       
-      if (!searchKeywords) {
-        return res.status(400).json({
-          success: false,
-          message: 'Could not extract search keywords from the image',
-          productData
-        });
-      }
+      const endTime = Date.now();
+      const executionTime = endTime - startTime;
       
-      // Use the extracted keywords to search for products
-      const scrapingResults = await scraperService.scrapeProductsByKeywords(searchKeywords);
+      console.log(`Image search completed in ${executionTime / 1000}s, found ${results.count} products`);
       
+      // Clean up the uploaded file
+      fs.unlink(imagePath, (err) => {
+        if (err) console.warn('Error deleting uploaded image:', err);
+      });
+      
+      // Return the results
       return res.json({
-        success: true,
-        source: 'image analysis',
-        identificationResult: {
-          productData,
-          rawResponse: identificationResult.rawResponse
-        },
-        ...scrapingResults
+        ...results,
+        executionTime,
+        extractedKeywords
+      });
+    } catch (error) {
+      console.error('Image search error:', error);
+      
+      // Clean up the uploaded file
+      fs.unlink(imagePath, (err) => {
+        if (err) console.warn('Error deleting uploaded image:', err);
+      });
+      
+      return res.status(500).json({
+        success: false,
+        message: 'Error processing image search',
+        error: error.message
       });
     }
-    
-    return res.status(400).json({
-      success: false,
-      message: 'Either image data or keywords are required'
-    });
-    
   } catch (error) {
-    console.error('Error in image-based product search:', error);
+    console.error('Image search endpoint error:', error);
     return res.status(500).json({
       success: false,
-      message: 'Error searching for products based on image',
+      message: 'Server error',
       error: error.message
     });
   }
 });
 
 /**
- * @route   POST api/price-comparison/consolidate
- * @desc    Consolidate product data from multiple sources using AI
- * @access  Public
+ * Get list of supported retailers
  */
-router.post('/consolidate', async (req, res) => {
+router.get('/retailers', (req, res) => {
   try {
-    const { products, keywords } = req.body;
+    const retailers = scraperService.retailers ? 
+      Object.keys(scraperService.retailers).map(key => ({
+        id: key,
+        name: scraperService.retailers[key].name
+      })) : [];
     
-    if (!products || !Array.isArray(products) || products.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Product data array is required'
-      });
-    }
-    
-    if (!keywords) {
-      return res.status(400).json({
-        success: false,
-        message: 'Search keywords are required for consolidation'
-      });
-    }
-    
-    const consolidatedData = await scraperService.consolidateProductData(products, keywords);
-    
-    return res.json({
+    res.json({
       success: true,
-      data: consolidatedData
+      retailers
     });
   } catch (error) {
-    console.error('Error consolidating product data:', error);
-    return res.status(500).json({
+    console.error('Error fetching retailers:', error);
+    res.status(500).json({
       success: false,
-      message: 'Error consolidating product data',
-      error: error.message
-    });
-  }
-});
-
-/**
- * @route   POST api/price-comparison/details
- * @desc    Get detailed information for a specific product
- * @access  Public
- */
-router.post('/details', async (req, res) => {
-  try {
-    const { product } = req.body;
-    
-    if (!product) {
-      return res.status(400).json({
-        success: false,
-        message: 'Product object is required'
-      });
-    }
-    
-    // Check for either url or link field
-    if ((!product.url || product.url === '#') && (!product.link || product.link === '#')) {
-      return res.status(400).json({
-        success: false,
-        message: 'Valid product with URL is required'
-      });
-    }
-    
-    // Ensure product has both url and link fields for compatibility
-    if (!product.url && product.link) {
-      product.url = product.link;
-    } else if (!product.link && product.url) {
-      product.link = product.url;
-    }
-    
-    const detailedProduct = await scraperService.fetchProductDetails(product);
-    
-    return res.json({
-      success: true,
-      data: detailedProduct
-    });
-  } catch (error) {
-    console.error('Error fetching product details:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Error fetching product details',
-      error: error.message
-    });
-  }
-});
-
-/**
- * @route   POST api/price-comparison/best-match
- * @desc    Find the best matching product for given keywords
- * @access  Public
- */
-router.post('/best-match', async (req, res) => {
-  try {
-    const { keywords, products } = req.body;
-    
-    if (!keywords) {
-      return res.status(400).json({
-        success: false,
-        message: 'Keywords are required'
-      });
-    }
-    
-    if (!products || !Array.isArray(products) || products.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Products array is required'
-      });
-    }
-    
-    const bestMatchProduct = await scraperService.findBestMatchProduct(keywords, products);
-    
-    return res.json({
-      success: true,
-      keywords,
-      bestMatch: bestMatchProduct
-    });
-  } catch (error) {
-    console.error('Error finding best match product:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Error finding best match product',
-      error: error.message
-    });
-  }
-});
-
-/**
- * @route   POST api/price-comparison/analyze
- * @desc    Analyze product data and provide AI-powered insights
- * @access  Public
- */
-router.post('/analyze', async (req, res) => {
-  try {
-    const { products, query } = req.body;
-    
-    if (!products || !Array.isArray(products) || products.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Product data array is required'
-      });
-    }
-    
-    // Get consolidated data
-    const consolidatedData = await scraperService.consolidateProductData(
-      products, 
-      query || 'product comparison'
-    );
-    
-    // Generate comprehensive product summary
-    const summaryResult = await groqService.generateProductSummary(consolidatedData);
-    
-    return res.json({
-      success: true,
-      consolidatedData,
-      summary: summaryResult
-    });
-  } catch (error) {
-    console.error('Error analyzing product data:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Error analyzing product data',
+      message: 'Error fetching supported retailers',
       error: error.message
     });
   }

@@ -811,24 +811,10 @@ console.log(\`Lowest price: \${result.lowestPrice.seller} - \${result.lowestPric
                       {products.length} Results for "{lastQuery}"
                     </h2>
                     
-                    {/* Product grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                      {products.map((product) => (
-                        <DataCard 
-                          key={product.id || Math.random().toString()} 
-                          product={product} 
-                          onSelect={handleProductSelect}
-                        />
-                      ))}
-                    </div>
-                    
-                    {/* No results message */}
-                    {products.length === 0 && (
-                      <div className="text-center py-10">
-                        <AlertCircle className="mx-auto h-12 w-12 text-red-400" />
-                        <p className="mt-4 text-xl text-gray-300">No products found. Try a different search term.</p>
-                      </div>
-                    )}
+                    <AnimatedGrid 
+                      products={products}
+                      onSelectProduct={handleProductSelect}
+                    />
                   </div>
                 ) : (
                   <div className="text-center py-10">

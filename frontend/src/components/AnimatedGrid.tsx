@@ -1,4 +1,3 @@
-
 import React from 'react';
 import DataCard, { ProductData } from './DataCard';
 
@@ -6,12 +5,14 @@ interface AnimatedGridProps {
   products: ProductData[];
   isLoading?: boolean;
   noResults?: boolean;
+  onSelectProduct?: (product: ProductData) => void;
 }
 
 const AnimatedGrid: React.FC<AnimatedGridProps> = ({ 
   products, 
   isLoading = false,
-  noResults = false 
+  noResults = false,
+  onSelectProduct
 }) => {
   if (isLoading) {
     return (
@@ -60,6 +61,7 @@ const AnimatedGrid: React.FC<AnimatedGridProps> = ({
               key={product.id || index} 
               product={product} 
               index={index}
+              onSelect={onSelectProduct}
             />
           ))}
         </div>

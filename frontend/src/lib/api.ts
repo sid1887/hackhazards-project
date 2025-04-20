@@ -44,4 +44,67 @@ api.interceptors.response.use(
   }
 );
 
+// Groq API Services
+export const groqApi = {
+  // Generate product summary from consolidated data
+  generateProductSummary: async (consolidatedData) => {
+    const response = await api.post('/api/groq/product-summary', { consolidatedData });
+    return response.data;
+  },
+
+  // Enhance web scraping results using Groq AI
+  enhanceWebScraping: async (productName, htmlContent) => {
+    const response = await api.post('/api/groq/enhance-scraping', { productName, htmlContent });
+    return response.data;
+  },
+
+  // Identify product from uploaded image
+  identifyProductFromImage: async (imageFile) => {
+    const formData = new FormData();
+    formData.append('productImage', imageFile);
+
+    const response = await api.post('/api/groq/identify-product', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  // Summarize and compare product data from different retailers
+  summarizeAndCompare: async (productData) => {
+    const response = await api.post('/api/groq/summarize', { productData });
+    return response.data;
+  },
+
+  // Get personalized product recommendations
+  getRecommendations: async (productName, userPreferences, budget, scrapedData) => {
+    const response = await api.post('/api/groq/recommendations', {
+      productName,
+      userPreferences,
+      budget,
+      scrapedData
+    });
+    return response.data;
+  },
+
+  // Generate creative content for products
+  generateCreativeContent: async (productDetails) => {
+    const response = await api.post('/api/groq/creative-content', { productDetails });
+    return response.data;
+  },
+
+  // Explain technical product features in simple terms
+  explainFeatures: async (specifications) => {
+    const response = await api.post('/api/groq/explain-features', { specifications });
+    return response.data;
+  },
+
+  // Analyze price comparison data
+  analyzePrices: async (priceData) => {
+    const response = await api.post('/api/groq/analyze-prices', { priceData });
+    return response.data;
+  }
+};
+
 export default api;
