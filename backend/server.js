@@ -100,7 +100,7 @@ async function initializeServer() {
   try {
     // Initialize scraper service
     console.log('Initializing scraper service...');
-    await scraperService.initializeBrowsers();
+    await scraperService.init();
     
     // Start the server
     server = app.listen(PORT, () => {
@@ -129,9 +129,9 @@ function setupGracefulShutdown(server) {
       });
       
       try {
-        // Clean up all resources
+        // Clean up resources
         console.log('Cleaning up resources...');
-        await scraperService.cleanup();
+        await scraperService.shutdown();
         console.log('All resources cleaned up successfully');
         
         // Exit process

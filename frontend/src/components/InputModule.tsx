@@ -213,8 +213,14 @@ const InputModule: React.FC<InputModuleProps> = ({
                   className="w-full h-full object-contain p-2 transition-all duration-300 hover:scale-105"
                 />
                 <button
-                  onClick={removeImage}
-                  className="absolute top-3 right-3 bg-black/60 rounded-full p-2 hover:bg-black/80 transition-colors border border-white/10"
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault(); 
+                    e.stopPropagation();
+                    removeImage();
+                  }}
+                  className="absolute top-3 right-3 bg-black/60 rounded-full p-2 hover:bg-black/80 transition-colors border border-white/10 z-20 cursor-pointer"
+                  style={{ width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 >
                   <X className="h-4 w-4 text-white" />
                 </button>

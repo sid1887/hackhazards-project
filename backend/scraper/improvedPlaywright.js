@@ -608,6 +608,312 @@ class ImprovedPlaywright {
       console.error(`Error closing browsers: ${error.message}`);
     }
   }
+
+  /**
+   * Search for products with Playwright
+   * @param {string} retailer - Retailer key
+   * @param {string} query - Search query
+   * @param {string} requestId - Request ID for tracking
+   * @returns {Promise<Array>} - Array of products
+   */
+  async searchWithPlaywright(retailer, query, requestId) {
+    try {
+      console.log(`Searching ${retailer} using Playwright for query "${query}"`);
+      
+      // Launch browser and create page
+      const { browser, context, page } = await this.launchBrowser('chromium');
+      
+      // Determine search URL based on retailer
+      let searchUrl;
+      if (retailer === 'amazon') {
+        searchUrl = `https://www.amazon.in/s?k=${encodeURIComponent(query)}`;
+      } else if (retailer === 'flipkart') {
+        searchUrl = `https://www.flipkart.com/search?q=${encodeURIComponent(query)}`;
+      } else if (retailer === 'croma') {
+        searchUrl = `https://www.croma.com/searchB?q=${encodeURIComponent(query)}`;
+      } else if (retailer === 'meesho') {
+        searchUrl = `https://www.meesho.com/search?q=${encodeURIComponent(query)}`;
+      } else if (retailer === 'relianceDigital') {
+        searchUrl = `https://www.reliancedigital.in/search?q=${encodeURIComponent(query)}`;
+      } else {
+        throw new Error(`Unsupported retailer for Playwright search: ${retailer}`);
+      }
+      
+      // Navigate to search page
+      await this.navigateWithRetries(page, searchUrl, { retries: 2 });
+      
+      // Handle cookie consent and other popups
+      await this.handlePopupsAndConsent(page, retailer);
+      
+      // Wait for content to load
+      await this.waitForPageContent(page, retailer);
+      
+      // Simulate human behavior
+      await this.simulateHumanInteraction(page);
+      
+      // Take debug screenshot if debug mode is enabled
+      await this.takeDebugScreenshot(page, `${retailer}-search-${Date.now()}`);
+      
+      // Extract product data - implementation varies by retailer
+      let products = [];
+      
+      if (retailer === 'amazon') {
+        products = await this._extractAmazonProducts(page);
+      } else if (retailer === 'flipkart') {
+        products = await this._extractFlipkartProducts(page);
+      } else if (retailer === 'croma') {
+        products = await this._extractCromaProducts(page);
+      } else if (retailer === 'meesho') {
+        products = await this._extractMeeshoProducts(page);
+      } else if (retailer === 'relianceDigital') {
+        products = await this._extractRelianceDigitalProducts(page);
+      }
+      
+      // Close context to free resources
+      await context.close();
+      
+      return products;
+    } catch (error) {
+      console.error(`Error searching with Playwright for ${retailer}:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Extract product data from Amazon search page
+   * @param {Object} page - Playwright page
+   * @returns {Promise<Array>} - Array of products
+   * @private
+   */
+  async _extractAmazonProducts(page) {
+    return await page.evaluate(() => {
+      const products = [];
+      
+      document.querySelectorAll('[data-component-type="s-search-result"]').forEach(item => {
+        try {
+          const asin = item.getAttribute('data-asin');
+          if (!asin) return;
+          
+          const titleElement = item.querySelector('h2 a span');
+          const priceElement = item.querySelector('.a-price .a-offscreen');
+          const imageElement = item.querySelector('img.s-image');
+          
+          if (!titleElement) return;
+          
+          const title = titleElement.textContent.trim();
+          const price = priceElement ? priceElement.textContent.trim() : '';
+          const imageUrl = imageElement ? imageElement.getAttribute('src') : '';
+          const url = `/dp/${asin}`;
+          
+          products.push({
+            id: asin,
+            name: title,
+            price: price.replace(/[^\d,.]/g, ''),
+            originalPrice: '',
+            imageUrl,
+            url: `https://www.amazon.in${url}`,
+            retailer: 'Amazon'
+          });
+        } catch (e) {
+          // Skip this item if extraction fails
+        }
+      });
+      
+      return products;
+    });
+  }
+
+  /**
+   * Extract product data from Flipkart search page
+   * @param {Object} page - Playwright page
+   * @returns {Promise<Array>} - Array of products
+   * @private
+   */
+  async _extractFlipkartProducts(page) {
+    return await page.evaluate(() => {
+      const products = [];
+      
+      document.querySelectorAll('div._1AtVbE, div._4ddWXP, div._2kHMtA').forEach(item => {
+        try {
+          const linkElement = item.querySelector('a[href*="/p/"]');
+          if (!linkElement) return;
+          
+          const url = linkElement.getAttribute('href');
+          const id = url.split('/p/')[1]?.split('/')[0] || '';
+          
+          const titleElement = item.querySelector('div._4rR01T, a.s1Q9rs, div.UE-OLD, div._2WkVRV');
+          const priceElement = item.querySelector('div._30jeq3');
+          const originalPriceElement = item.querySelector('div._3I9_wc');
+          const imageElement = item.querySelector('img._396cs4, img._2r_T1I, img._2Ys_sh');
+          
+          if (!titleElement) return;
+          
+          const title = titleElement.textContent.trim();
+          const price = priceElement ? priceElement.textContent.trim() : '';
+          const originalPrice = originalPriceElement ? originalPriceElement.textContent.trim() : '';
+          const imageUrl = imageElement ? (imageElement.getAttribute('src') || imageElement.getAttribute('data-src')) : '';
+          
+          products.push({
+            id,
+            name: title,
+            price: price.replace(/[^\d,.]/g, ''),
+            originalPrice: originalPrice.replace(/[^\d,.]/g, ''),
+            imageUrl,
+            url: url.startsWith('http') ? url : `https://www.flipkart.com${url}`,
+            retailer: 'Flipkart'
+          });
+        } catch (e) {
+          // Skip this item if extraction fails
+        }
+      });
+      
+      return products;
+    });
+  }
+
+  /**
+   * Extract product data from Croma search page
+   * @param {Object} page - Playwright page
+   * @returns {Promise<Array>} - Array of products
+   * @private
+   */
+  async _extractCromaProducts(page) {
+    return await page.evaluate(() => {
+      const products = [];
+      
+      document.querySelectorAll('.product-item, .cp-card').forEach(item => {
+        try {
+          const linkElement = item.querySelector('a[href*="/p/"]');
+          if (!linkElement) return;
+          
+          const url = linkElement.getAttribute('href');
+          const id = url.split('/p/')[1]?.split('/')[0] || '';
+          
+          const titleElement = item.querySelector('h3, .product-title');
+          const priceElement = item.querySelector('.new-price, .pd-price');
+          const originalPriceElement = item.querySelector('.old-price, .pd-old-price');
+          const imageElement = item.querySelector('.product-img img');
+          
+          if (!titleElement) return;
+          
+          const title = titleElement.textContent.trim();
+          const price = priceElement ? priceElement.textContent.trim() : '';
+          const originalPrice = originalPriceElement ? originalPriceElement.textContent.trim() : '';
+          const imageUrl = imageElement ? (imageElement.getAttribute('src') || imageElement.getAttribute('data-src')) : '';
+          
+          products.push({
+            id,
+            name: title,
+            price: price.replace(/[^\d,.]/g, ''),
+            originalPrice: originalPrice.replace(/[^\d,.]/g, ''),
+            imageUrl,
+            url: url.startsWith('http') ? url : `https://www.croma.com${url}`,
+            retailer: 'Croma'
+          });
+        } catch (e) {
+          // Skip this item if extraction fails
+        }
+      });
+      
+      return products;
+    });
+  }
+
+  /**
+   * Extract product data from Meesho search page
+   * @param {Object} page - Playwright page
+   * @returns {Promise<Array>} - Array of products
+   * @private
+   */
+  async _extractMeeshoProducts(page) {
+    return await page.evaluate(() => {
+      const products = [];
+      
+      document.querySelectorAll('[data-testid="product-container"]').forEach(item => {
+        try {
+          const linkElement = item.querySelector('a');
+          if (!linkElement) return;
+          
+          const url = linkElement.getAttribute('href');
+          const id = url.split('/').pop();
+          
+          const titleElement = item.querySelector('p.card-title, .ProductList__ProductTitle');
+          const priceElement = item.querySelector('.sc-AykKC, .final-price, .product-price');
+          const originalPriceElement = item.querySelector('.original-price');
+          const imageElement = item.querySelector('img.product-image, .img-main');
+          
+          if (!titleElement) return;
+          
+          const title = titleElement.textContent.trim();
+          const price = priceElement ? priceElement.textContent.trim() : '';
+          const originalPrice = originalPriceElement ? originalPriceElement.textContent.trim() : '';
+          const imageUrl = imageElement ? (imageElement.getAttribute('src') || imageElement.getAttribute('data-src')) : '';
+          
+          products.push({
+            id,
+            name: title,
+            price: price.replace(/[^\d,.]/g, ''),
+            originalPrice: originalPrice.replace(/[^\d,.]/g, ''),
+            imageUrl,
+            url: url.startsWith('http') ? url : `https://www.meesho.com${url}`,
+            retailer: 'Meesho'
+          });
+        } catch (e) {
+          // Skip this item if extraction fails
+        }
+      });
+      
+      return products;
+    });
+  }
+
+  /**
+   * Extract product data from Reliance Digital search page
+   * @param {Object} page - Playwright page
+   * @returns {Promise<Array>} - Array of products
+   * @private
+   */
+  async _extractRelianceDigitalProducts(page) {
+    return await page.evaluate(() => {
+      const products = [];
+      
+      document.querySelectorAll('.sp__product, .grid-item, .product-item').forEach(item => {
+        try {
+          const linkElement = item.querySelector('a');
+          if (!linkElement) return;
+          
+          const url = linkElement.getAttribute('href');
+          const id = url.split('/').pop();
+          
+          const titleElement = item.querySelector('.sp__name, .product-name');
+          const priceElement = item.querySelector('.slider-product__price, .sp__price');
+          const originalPriceElement = item.querySelector('.sp__mrp, .product-mrp');
+          const imageElement = item.querySelector('.slider-product__img img, .main-img');
+          
+          if (!titleElement) return;
+          
+          const title = titleElement.textContent.trim();
+          const price = priceElement ? priceElement.textContent.trim() : '';
+          const originalPrice = originalPriceElement ? originalPriceElement.textContent.trim() : '';
+          const imageUrl = imageElement ? (imageElement.getAttribute('src') || imageElement.getAttribute('data-src')) : '';
+          
+          products.push({
+            id,
+            name: title,
+            price: price.replace(/[^\d,.]/g, ''),
+            originalPrice: originalPrice.replace(/[^\d,.]/g, ''),
+            imageUrl,
+            url: url.startsWith('http') ? url : `https://www.reliancedigital.in${url}`,
+            retailer: 'Reliance Digital'
+          });
+        } catch (e) {
+          // Skip this item if extraction fails
+        }
+      });
+      
+      return products;
+    });
+  }
 }
 
 // Create a singleton instance for the application

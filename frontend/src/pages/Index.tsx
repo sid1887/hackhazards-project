@@ -86,19 +86,30 @@ const Index = () => {
 
   // Effect to handle restoring search results when navigating back from product details
   useEffect(() => {
-    // Check if user is returning from product details
-    if (location.state?.fromDetails && location.state?.preserveSearch) {
+    // Check if user is returning from product details with the restoreResults flag
+    if (location.state?.fromDetails && (location.state?.preserveSearch || location.state?.restoreResults)) {
       setIsRestoring(true);
       
-      // Get stored search results
-      const storedResults = sessionStorage.getItem('searchResults');
-      const storedQuery = sessionStorage.getItem('lastSearchQuery');
+      // First check localStorage (more persistent)
+      const localResults = localStorage.getItem('searchResults');
+      const localQuery = localStorage.getItem('searchQuery') || localStorage.getItem('lastSearchQuery');
+      
+      // Then check sessionStorage (more recent)
+      const sessionResults = sessionStorage.getItem('searchResults') || sessionStorage.getItem('lastSearchResults');
+      const sessionQuery = sessionStorage.getItem('searchQuery') || sessionStorage.getItem('lastSearchQuery');
+      
+      // Use the most recent data available
+      const storedResults = sessionResults || localResults;
+      const storedQuery = sessionQuery || localQuery;
       
       if (storedResults && storedQuery) {
         try {
           const parsedResults = JSON.parse(storedResults);
           setProducts(parsedResults);
           setQuery(storedQuery);
+          setLastQuery(storedQuery);
+          setSearchPerformed(true);
+          setShowIntro(false);
           
           // Show toast with more informative message
           toast({
@@ -112,11 +123,11 @@ const Index = () => {
           // If there's a product ID in the state, scroll to that product after a small delay
           if (location.state.productId) {
             setTimeout(() => {
-              const element = document.getElementById(`product-${location.state.productId}`);
-              if (element) {
-                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                element.classList.add('highlight-product');
-                setTimeout(() => element.classList.remove('highlight-product'), 2000);
+              const productCard = document.querySelector(`[data-product-id="${location.state.productId}"]`);
+              if (productCard) {
+                productCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                productCard.classList.add('highlight-product');
+                setTimeout(() => productCard.classList.remove('highlight-product'), 2000);
               }
             }, 300);
           }
@@ -399,7 +410,26 @@ const Index = () => {
   const imageSearchMutation = useMutation({
     mutationFn: async (payload: { imageData: string, extractedKeywords?: string }) => {
       try {
-        const response = await api.post<ApiResponse>('/api/price-comparison/image-search', payload);
+        // Convert base64 image data to a Blob
+        const imageBlob = await fetch(payload.imageData).then(r => r.blob());
+        
+        // Create FormData and append image and keywords
+        const formData = new FormData();
+        formData.append('image', imageBlob, 'image.jpg');
+        
+        if (payload.extractedKeywords) {
+          formData.append('extractedKeywords', payload.extractedKeywords);
+        }
+        
+        const response = await api.post<ApiResponse>(
+          '/api/price-comparison/image-search', 
+          formData,
+          {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+            },
+          }
+        );
         console.log('RAW IMAGE SEARCH RESPONSE:', response.data);
         return response.data;
       } catch (error: any) {

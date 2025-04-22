@@ -179,15 +179,45 @@ const ProductDetails: React.FC = () => {
 
   // Enhanced back button function to better handle state preservation
   const handleBackToResults = () => {
-    // Navigate back to search results with proper state flags
-    navigate('/', { 
-      state: { 
-        fromDetails: true, 
-        preserveSearch: true,
-        productId: product?.productId || product?.id, // Pass product ID for scroll position restoration
-        timestamp: Date.now() // Add timestamp to ensure state change is detected
-      } 
-    });
+    // First check if we have search results in localStorage (more persistent than sessionStorage)
+    const searchResults = localStorage.getItem('searchResults');
+    const searchQuery = localStorage.getItem('searchQuery');
+    
+    // Also check sessionStorage for more recent results
+    const sessionResults = sessionStorage.getItem('lastSearchResults');
+    const sessionQuery = sessionStorage.getItem('lastSearchQuery');
+    
+    // Use most recent data available (session preferred over local)
+    const storedResults = sessionResults || searchResults;
+    const storedQuery = sessionQuery || searchQuery;
+    
+    if (storedResults) {
+      // Make sure both localStorage and sessionStorage have the latest data
+      localStorage.setItem('searchResults', storedResults);
+      sessionStorage.setItem('searchResults', storedResults);
+      
+      if (storedQuery) {
+        localStorage.setItem('searchQuery', storedQuery);
+        sessionStorage.setItem('searchQuery', storedQuery);
+      }
+      
+      // Set a flag to indicate search was performed and results should be displayed
+      sessionStorage.setItem('searchPerformed', 'true');
+      
+      // Navigate back to home page with state to restore search results
+      navigate('/', { 
+        state: { 
+          fromDetails: true, 
+          preserveSearch: true,
+          restoreResults: true,
+          productId: product?.id, 
+          timestamp: Date.now() 
+        } 
+      });
+    } else {
+      // If no stored results found, just navigate back to home
+      navigate('/');
+    }
   };
 
   if (loading) {

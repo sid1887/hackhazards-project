@@ -247,6 +247,7 @@ const DataCard: React.FC<DataCardProps> = ({ product, index, onSelect }) => {
           <button 
             className="text-sm text-gray-300 flex items-center hover:text-cyber-blue transition-colors dual-tone-glow px-3 py-1 rounded-full"
             onClick={(e) => {
+              e.preventDefault();
               e.stopPropagation();
               setShowDetails(!showDetails);
             }}
@@ -272,31 +273,45 @@ const DataCard: React.FC<DataCardProps> = ({ product, index, onSelect }) => {
         {/* Expandable details section */}
         <div 
           className={cn(
-            "border-t border-white/5 p-4 bg-cyber-dark/80 text-sm overflow-hidden transition-all duration-500 ease-in-out",
-            showDetails ? "max-h-96 opacity-100" : "max-h-0 opacity-0 p-0 border-t-0"
+            "border-t border-white/5 bg-cyber-dark/80 text-sm overflow-hidden transition-all duration-500 ease-in-out",
+            showDetails ? "max-h-96 opacity-100 p-4" : "max-h-0 opacity-0 p-0 border-t-0"
           )}
         >
           {showDetails && (
-            <div className="animate-fade-in py-2" onClick={handleButtonClick}>
+            <div className="animate-fade-in py-2" onClick={(e) => e.stopPropagation()}>
               <h4 className="font-cyber text-cyber-pink mb-3 flex items-center">
                 <ShoppingBag className="h-4 w-4 mr-2" />
-                Product Details
+                Product Specifications
               </h4>
               
               <div className="space-y-3">
+                {/* Display actual product specs if available */}
+                {product.rating && (
+                  <div className="flex items-center text-gray-300">
+                    <CheckCircle className="h-4 w-4 mr-2 text-green-500" />
+                    <span>Rating: {product.rating}/5</span>
+                  </div>
+                )}
+                
+                {productOriginalPrice && productPrice < productOriginalPrice && (
+                  <div className="flex items-center text-gray-300">
+                    <CheckCircle className="h-4 w-4 mr-2 text-green-500" />
+                    <span>You save: {formatPrice(productOriginalPrice - productPrice)} ({discount}% off)</span>
+                  </div>
+                )}
+                
                 <div className="flex items-center text-gray-300">
                   <CheckCircle className="h-4 w-4 mr-2 text-green-500" />
-                  <span>Available for immediate shipping</span>
+                  <span>Seller: {productSeller}</span>
                 </div>
                 
                 <div className="flex items-center text-gray-300">
                   <CheckCircle className="h-4 w-4 mr-2 text-green-500" />
-                  <span>Free returns within 30 days</span>
+                  <span>{product.isBestDeal ? 'Best Value Overall' : (product.isLowestPrice ? 'Lowest Price Available' : 'Competitive Price')}</span>
                 </div>
                 
                 <p className="text-gray-400 my-2 border-l-2 border-cyber-blue/30 pl-3">
-                  This would display additional product information including specs, 
-                  availability, and other useful comparison data.
+                  Click the card to see full product details and comparisons across all retailers.
                 </p>
               </div>
               

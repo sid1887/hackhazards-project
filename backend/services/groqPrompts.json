@@ -1,0 +1,34 @@
+{
+  "systemPrompts": {
+    "productIdentification": "You are a visual recognition assistant specialized in product identification. Analyze product images in detail and extract structured information accurately. Return only valid JSON.",
+    
+    "webScraping": "You are an expert at extracting structured product data from HTML content. Focus on product details, pricing, and specifications. Return valid JSON only.",
+    
+    "productSummary": "You are a product analysis expert who provides clear, informative summaries of products, their features, pricing comparisons, and value recommendations. Structure your analysis with clear sections.",
+    
+    "productEnhancement": "You are a product data enhancement specialist. Your task is to enrich product information with additional details, specifications, and search-optimized keywords. Maintain factual accuracy and avoid inventing specifications."
+  },
+  
+  "userPrompts": {
+    "productIdentification": "Analyze this product image in detail and identify what it shows. Please provide the following information in JSON format:\n1. product: The exact product name\n2. brand: The brand name if visible\n3. category: Product category (e.g., Electronics, Clothing, etc.)\n4. features: 2-3 key features visible in the image\n5. keywords: 5-8 specific search terms that would help find this exact product online\n6. description: A brief description of what you see (30 words max)\n\nFormat your response as valid JSON only.",
+    
+    "webScraping": "Extract product information from this HTML content for the search query: \"{{QUERY}}\".\n\nReturn a JSON array of products with these fields:\n- productName: Full product name\n- price: Current price with currency symbol\n- originalPrice: Original price before discount (if available)\n- discount: Discount percentage (if available)\n- imageUrl: URL of the product image\n- url: URL to the product page\n- rating: Product rating (if available)\n\nOnly include products that are relevant to the search query.\nFormat your response as valid JSON only.",
+    
+    "productSummary": "Generate a brief product summary for:\n{{PRODUCT_DATA}}\n\nInclude: product overview, price comparison, best value, key features, and buying recommendation.",
+    
+    "productEnhancement": "Enhance the following product data with additional details, specifications, and search-optimized keywords. Do not invent specifications that aren't implied by the product type and category.\n\nProduct Data:\n{{PRODUCT_DATA}}\n\nReturn an enhanced JSON object with the following fields:\n- product: The refined product name\n- brand: The brand name\n- category: Product category\n- features: Expanded list of key features (5-8 items)\n- specifications: Technical specifications as key-value pairs\n- keywords: Expanded list of search-optimized keywords (10-15 items)\n- description: An enhanced product description (50-100 words)\n- searchTerms: 3-5 specific search phrases that would help find this exact product\n\nFormat your response as valid JSON only."
+  },
+  
+  "errorHandling": {
+    "blurredImage": "Blurred image, couldn't recognize product.",
+    "lowResolution": "Image resolution is too low for accurate product detection.",
+    "noProductFound": "No recognizable product found in the image.",
+    "suggestion": {
+      "blurredImage": "Try uploading a clearer, non-blurry image.",
+      "lowResolution": "Try uploading a higher resolution image.",
+      "badAngle": "Try uploading a front-facing image of the product.",
+      "partial": "Try uploading an image showing the complete product.",
+      "generic": "Try uploading a different image or specify product keywords manually."
+    }
+  }
+}

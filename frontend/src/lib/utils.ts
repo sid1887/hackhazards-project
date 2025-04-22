@@ -1,4 +1,3 @@
-
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 
@@ -34,3 +33,12 @@ export function truncateText(text: string, maxLength: number) {
 export function getRandomItem<T>(array: T[]): T {
   return array[Math.floor(Math.random() * array.length)];
 }
+
+// Export a default object with all utility functions
+export default {
+  cn,
+  formatCurrency,
+  calculateDiscount,
+  truncateText,
+  getRandomItem
+};

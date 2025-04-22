@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
+import { useIsMobile } from '../hooks/use-mobile';
 
 const HeroParticles = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -11,181 +12,207 @@ const HeroParticles = () => {
     speedY: number;
     color: string;
   }[]>([]);
+  const isMobile = useIsMobile();
+  const [canvasSupported, setCanvasSupported] = useState(true);
   
   // Memoized function to set canvas size
   const setCanvasSize = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    
-    // Use window dimensions for full-page coverage
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-    const dpr = window.devicePixelRatio || 1;
-    
-    // Set display size (CSS)
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
-    
-    // Set actual canvas size in pixels
-    canvas.width = Math.floor(width * dpr);
-    canvas.height = Math.floor(height * dpr);
-    
-    // Scale context to match DPI
-    ctx.scale(dpr, dpr);
-    
-    return { ctx, width, height, dpr };
+    try {
+      const ctx = canvas.getContext('2d', { alpha: true, willReadFrequently: false });
+      if (!ctx) {
+        setCanvasSupported(false);
+        return;
+      }
+      
+      // Use window dimensions for full-page coverage
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2); // Cap at 2x for performance
+      
+      // Set display size (CSS)
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+      
+      // Set actual canvas size in pixels (with limits for performance)
+      const maxSize = 1920 * 1080; // Limit size for performance
+      const targetSize = width * height * dpr * dpr;
+      const adjustedDpr = targetSize > maxSize ? Math.sqrt(maxSize / (width * height)) : dpr;
+      
+      canvas.width = Math.floor(width * adjustedDpr);
+      canvas.height = Math.floor(height * adjustedDpr);
+      
+      // Scale context to match DPR
+      ctx.scale(adjustedDpr, adjustedDpr);
+      
+      return { ctx, width, height, dpr: adjustedDpr };
+    } catch (error) {
+      console.error('HeroParticles canvas setup error:', error);
+      setCanvasSupported(false);
+      return;
+    }
   }, []);
   
   // Create particles function
   const createParticles = useCallback((width: number, height: number) => {
-    const particlesArray: {
-      x: number;
-      y: number;
-      size: number;
-      speedX: number;
-      speedY: number;
-      color: string;
-    }[] = [];
-    
-    // Soft blue color palette with lower opacity
-    const colors = [
-      'rgba(0, 188, 212, 0.2)', // main blue accent
-      'rgba(59, 130, 246, 0.2)', // soft blue
-      'rgba(0, 150, 199, 0.2)', // another blue tone
-    ];
-    
-    // Scale particle count with viewport size
-    const particleCount = Math.min(Math.floor((width * height) / 20000), 50);
-    
-    for (let i = 0; i < particleCount; i++) {
-      const size = Math.random() * 2 + 0.5; // Smaller particles
-      const x = Math.random() * width;
-      const y = Math.random() * height;
-      const speedX = Math.random() * 0.3 - 0.15; // Slower movement
-      const speedY = Math.random() * 0.3 - 0.15; // Slower movement
-      const color = colors[Math.floor(Math.random() * colors.length)];
+    try {
+      const particlesArray: {
+        x: number;
+        y: number;
+        size: number;
+        speedX: number;
+        speedY: number;
+        color: string;
+      }[] = [];
       
-      particlesArray.push({
-        x, y, size, speedX, speedY, color
-      });
+      // Soft blue color palette with lower opacity
+      const colors = [
+        'rgba(0, 188, 212, 0.2)', // main blue accent
+        'rgba(59, 130, 246, 0.2)', // soft blue
+        'rgba(0, 150, 199, 0.2)', // another blue tone
+      ];
+      
+      // Scale particle count with viewport size but keep it reasonable
+      const particleCount = Math.min(
+        Math.floor((width * height) / (isMobile ? 30000 : 25000)), 
+        isMobile ? 30 : 50
+      );
+      
+      for (let i = 0; i < particleCount; i++) {
+        const size = Math.random() * (isMobile ? 1.5 : 2) + 0.5; // Smaller particles
+        const x = Math.random() * width;
+        const y = Math.random() * height;
+        const speedX = (Math.random() - 0.5) * (isMobile ? 0.3 : 0.5);
+        const speedY = (Math.random() - 0.5) * (isMobile ? 0.3 : 0.5);
+        const color = colors[Math.floor(Math.random() * colors.length)];
+        
+        particlesArray.push({
+          x,
+          y,
+          size,
+          speedX,
+          speedY,
+          color,
+        });
+      }
+      
+      particlesArrayRef.current = particlesArray;
+      return particlesArray;
+    } catch (error) {
+      console.error('HeroParticles creation error:', error);
+      return [];
     }
-    
-    particlesArrayRef.current = particlesArray;
-    return particlesArray;
-  }, []);
+  }, [isMobile]);
   
   useEffect(() => {
-    // Initial setup
-    const setup = setCanvasSize();
-    if (!setup) return;
+    if (!canvasSupported) return;
     
-    const { ctx, width, height } = setup;
-    let particlesArray = createParticles(width, height);
-    
-    // Animate particles
-    const animate = () => {
-      if (!ctx) return;
+    try {
+      // Setup canvas with proper sizing
+      const setup = setCanvasSize();
+      if (!setup) return;
       
-      // Semi-transparent clearing for subtle trailing effect
-      ctx.fillStyle = 'rgba(15, 15, 15, 0.2)';
-      ctx.fillRect(0, 0, width, height);
+      const { ctx, width, height, dpr } = setup;
+      let particlesArray = createParticles(width, height);
       
-      for (let i = 0; i < particlesArray.length; i++) {
-        const p = particlesArray[i];
+      // Animation function
+      const animate = (timestamp: number) => {
+        if (!ctx) return;
         
-        ctx.fillStyle = p.color;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fill();
-        
-        p.x += p.speedX;
-        p.y += p.speedY;
-        
-        // Bounce particles off edges
-        if (p.x < 0 || p.x > width) {
-          p.speedX = -p.speedX;
-        }
-        
-        if (p.y < 0 || p.y > height) {
-          p.speedY = -p.speedY;
-        }
-        
-        // Connect particles with lines - less connections, more subtle
-        for (let j = i; j < particlesArray.length; j++) {
-          const dx = particlesArray[i].x - particlesArray[j].x;
-          const dy = particlesArray[i].y - particlesArray[j].y;
-          const distance = Math.sqrt(dx * dx + dy * dy);
+        try {
+          // Clear canvas, using clearRect for transparent background
+          ctx.clearRect(0, 0, width, height);
           
-          if (distance < 80) { // Reduced connection distance
+          // Update and draw each particle
+          particlesArray.forEach((particle) => {
+            // Move the particle
+            particle.x += particle.speedX;
+            particle.y += particle.speedY;
+            
+            // Wrap particles around screen edges
+            if (particle.x < 0) particle.x = width;
+            if (particle.x > width) particle.x = 0;
+            if (particle.y < 0) particle.y = height;
+            if (particle.y > height) particle.y = 0;
+            
+            // Draw the particle
             ctx.beginPath();
-            ctx.strokeStyle = p.color;
-            ctx.globalAlpha = 0.5 - distance / 160; // More subtle lines
-            ctx.lineWidth = 0.3; // Thinner lines
-            ctx.moveTo(p.x, p.y);
-            ctx.lineTo(particlesArray[j].x, particlesArray[j].y);
-            ctx.stroke();
-            ctx.globalAlpha = 1;
+            ctx.fillStyle = particle.color;
+            ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+            ctx.fill();
+          });
+        } catch (renderError) {
+          console.error('HeroParticles render error:', renderError);
+        }
+        
+        // Continue the animation loop
+        animationRef.current = requestAnimationFrame(animate);
+      };
+      
+      // Start the animation
+      animationRef.current = requestAnimationFrame(animate);
+      
+      // Handle window resize
+      const handleResize = () => {
+        try {
+          const newSetup = setCanvasSize();
+          if (!newSetup) return;
+          
+          const { width: newWidth, height: newHeight } = newSetup;
+          
+          // Create new particles on significant size change
+          if (Math.abs(newWidth - width) > width * 0.2 || Math.abs(newHeight - height) > height * 0.2) {
+            particlesArray = createParticles(newWidth, newHeight);
+          }
+        } catch (resizeError) {
+          console.error('HeroParticles resize error:', resizeError);
+        }
+      };
+      
+      // Visibility change handler for performance
+      const handleVisibilityChange = () => {
+        if (document.hidden) {
+          // Page is hidden, cancel animation to save resources
+          if (animationRef.current) {
+            cancelAnimationFrame(animationRef.current);
+            animationRef.current = undefined;
+          }
+        } else {
+          // Page is visible again, resume animation
+          if (!animationRef.current) {
+            animationRef.current = requestAnimationFrame(animate);
           }
         }
-      }
+      };
       
-      animationRef.current = requestAnimationFrame(animate);
-    };
-    
-    // Handle resize
-    const handleResize = () => {
-      const newSetup = setCanvasSize();
-      if (!newSetup) return;
+      // Add event listeners
+      window.addEventListener('resize', handleResize);
+      document.addEventListener('visibilitychange', handleVisibilityChange);
       
-      const { width, height } = newSetup;
-      particlesArray = createParticles(width, height);
-    };
-    
-    // Handle visibility change to pause/resume animation
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        // Page is hidden, cancel animation to save resources
+      // Clean up
+      return () => {
+        window.removeEventListener('resize', handleResize);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        
         if (animationRef.current) {
           cancelAnimationFrame(animationRef.current);
-          animationRef.current = undefined;
         }
-      } else {
-        // Page is visible again, resume animation
-        if (!animationRef.current) {
-          animationRef.current = requestAnimationFrame(animate);
-        }
-      }
-    };
-    
-    // Start the animation
-    animate();
-    
-    // Add event listeners
-    window.addEventListener('resize', handleResize);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    // Cleanup
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
-  }, [setCanvasSize, createParticles]);
+      };
+    } catch (setupError) {
+      console.error('HeroParticles setup error:', setupError);
+    }
+  }, [setCanvasSize, createParticles, canvasSupported]);
   
-  return (
-    <canvas 
-      ref={canvasRef} 
+  return canvasSupported ? (
+    <canvas
+      ref={canvasRef}
       className="w-full h-full"
       style={{ width: '100%', height: '100%', display: 'block' }}
       aria-hidden="true"
     />
-  );
+  ) : null; // Return nothing if canvas isn't supported to avoid errors
 };
 
 export default HeroParticles;

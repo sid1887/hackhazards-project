@@ -2,6 +2,18 @@ const axios = require('axios');
 const fs = require('fs');
 const FormData = require('form-data');
 const cheerio = require('cheerio');
+const path = require('path');
+const mime = require('mime-types');
+const crypto = require('crypto');
+const prompts = require('./groqPrompts.json');
+
+// Import scraper service for hybrid search
+let scraperService;
+try {
+  scraperService = require('../scraper/scraperService');
+} catch (error) {
+  console.warn('Scraper service not available for hybrid search:', error.message);
+}
 
 /**
  * Service for interacting with Groq API for various AI and ML tasks
@@ -17,22 +29,28 @@ class GroqService {
     this.defaultTextModel = 'llama3-8b-8192';  // Changed from llama3-70b-8192 to reduce token usage
     this.defaultVisionModel = 'llama3-8b-8192-vision';
     
-    // System prompts for different tasks - optimized for token efficiency
-    this.systemPrompts = {
-      productIdentification: 'Identify products in images. Return JSON with product name, brand, category, features, keywords.',
-      
-      webScraping: 'Extract product data from HTML. Return JSON with name, price, specs, features.',
-      
-      productSummary: 'Analyze product data and create an informative comparison summary.'
-    };
+    // Import system prompts from external file
+    this.systemPrompts = prompts.systemPrompts;
+    this.userPrompts = prompts.userPrompts;
+    this.errorHandling = prompts.errorHandling;
 
     // Simple cache to prevent duplicate API calls
     this.cache = {
       textRequests: {},
       visionRequests: {},
+      imageHashes: {}, // Store image hashes for quicker lookups
       maxCacheSize: 100,
       cacheKeys: []
     };
+    
+    // Debug mode for logging
+    this.debugMode = process.env.DEBUG_GROQ === 'true';
+    
+    // Create debug directory if it doesn't exist
+    this.debugDir = path.join(__dirname, '../../debug/groq');
+    if (this.debugMode && !fs.existsSync(this.debugDir)) {
+      fs.mkdirSync(this.debugDir, { recursive: true });
+    }
   }
 
   /**
@@ -176,8 +194,11 @@ class GroqService {
         throw new Error('Groq API key is not configured');
       }
       
-      // Create a cache key - for vision, use image path + prompt
-      const cacheKey = `${imagePath}::${prompt}::${JSON.stringify(parameters)}`;
+      // Generate hash of image for cache lookup
+      const imageHash = this.getImageHash(imagePath);
+      
+      // Create a cache key - for vision, use image hash + prompt
+      const cacheKey = `${imageHash}::${prompt}::${JSON.stringify(parameters)}`;
       
       // Check cache first
       const cachedResponse = this.getFromCache('visionRequests', cacheKey);
@@ -190,6 +211,32 @@ class GroqService {
       const imageBuffer = fs.readFileSync(imagePath);
       const base64Image = imageBuffer.toString('base64');
       
+      // Use mime-types to detect content type dynamically
+      const contentType = mime.lookup(imagePath) || 'image/jpeg';
+      
+      // Log image details in debug mode
+      if (this.debugMode) {
+        console.log(`Processing image: ${path.basename(imagePath)}`);
+        console.log(`Image hash: ${imageHash}`);
+        console.log(`Content type: ${contentType}`);
+        console.log(`Image size: ${imageBuffer.length} bytes`);
+        
+        // Save debug info
+        const debugInfo = {
+          timestamp: new Date().toISOString(),
+          imagePath,
+          imageHash,
+          contentType,
+          imageSize: imageBuffer.length,
+          prompt
+        };
+        
+        fs.writeFileSync(
+          path.join(this.debugDir, `vision_request_${Date.now()}.json`),
+          JSON.stringify(debugInfo, null, 2)
+        );
+      }
+      
       // Create request payload with token-efficient prompt
       const messages = [
         {
@@ -199,7 +246,7 @@ class GroqService {
             {
               type: 'image_url',
               image_url: {
-                url: `data:image/jpeg;base64,${base64Image}`
+                url: `data:${contentType};base64,${base64Image}`
               }
             }
           ]
@@ -212,7 +259,7 @@ class GroqService {
           model: parameters.model || this.defaultVisionModel,
           messages,
           temperature: parameters.temperature ?? 0.2,
-          max_tokens: parameters.max_tokens ?? 2048, // Reduced from 4096
+          max_tokens: parameters.max_tokens ?? 2048,
           top_p: parameters.top_p ?? 1.0,
           stream: false
         },
@@ -226,6 +273,21 @@ class GroqService {
       
       // Cache the successful response
       this.addToCache('visionRequests', cacheKey, response.data);
+      
+      // Store the image hash for future reference
+      this.cache.imageHashes[imageHash] = {
+        path: imagePath,
+        contentType,
+        timestamp: Date.now()
+      };
+      
+      // Save response in debug mode
+      if (this.debugMode) {
+        fs.writeFileSync(
+          path.join(this.debugDir, `vision_response_${imageHash}.json`),
+          JSON.stringify(response.data, null, 2)
+        );
+      }
       
       return response.data;
     } catch (error) {
@@ -248,130 +310,126 @@ class GroqService {
       throw error;
     }
   }
-  
-  /**
-   * Extract relevant content from HTML to reduce token usage
-   * @param {string} html - HTML content
-   * @param {string} query - Search query
-   * @returns {string} - Relevant HTML content
-   */
-  extractRelevantContent(html, query) {
-    try {
-      // Load HTML with cheerio
-      const $ = cheerio.load(html);
-      
-      // Remove unnecessary elements
-      $('script, style, meta, link, noscript, iframe, svg').remove();
-      
-      // Extract product-related elements
-      const productElements = [];
-      
-      // Common product container selectors
-      const selectors = [
-        // Generic product containers
-        '[class*="product"], [class*="item"], [class*="card"]',
-        // Elements with price
-        '[class*="price"]',
-        // Elements with product in the class name
-        '[class*="product"]',
-        // List items with images and text
-        'li:has(img):has(a)',
-        // Divs with images, text and price-like content
-        'div:has(img):has([class*="price"])',
-        // Amazon specific
-        '[data-component-type="s-search-result"]',
-        // Flipkart specific
-        '._1AtVbE, ._4ddWXP',
-        // Meesho specific
-        '.ProductList__Wrapper, [data-testid="product-container"]'
-      ];
-      
-      // Extract elements matching selectors
-      selectors.forEach(selector => {
-        try {
-          $(selector).each((i, el) => {
-            const text = $(el).text().toLowerCase();
-            // Only include if it might be related to the query
-            if (text.includes(query.toLowerCase())) {
-              productElements.push($(el).html());
-            }
-          });
-        } catch (err) {
-          // Ignore selector errors
-        }
-      });
-      
-      // If no product elements found, return a portion of the body
-      if (productElements.length === 0) {
-        return $('body').html().substring(0, 10000); // Limit to 10K chars
-      }
-      
-      // Join the product elements
-      return productElements.join('\n');
-      
-    } catch (error) {
-      console.error('Error extracting relevant content:', error);
-      // Return a portion of the original HTML if extraction fails
-      return html.substring(0, 10000); // Limit to 10K chars
-    }
-  }
 
   /**
-   * Enhance web scraping with AI analysis
-   * @param {string} query - Search query
-   * @param {string} html - HTML content
-   * @returns {Promise<Object>} - Enhanced data
+   * Generate MD5 hash of an image file
+   * @param {string} imagePath - Path to image file
+   * @returns {string} - MD5 hash of image
    */
-  async enhanceWebScraping(query, html) {
+  getImageHash(imagePath) {
     try {
-      console.log(`Enhancing web scraping for query: ${query}`);
-      
-      // Extract relevant content to reduce token usage
-      const relevantContent = this.extractRelevantContent(html, query);
-      
-      // Create a prompt for the AI
-      const prompt = `
-        Extract product information from this HTML content for the search query: "${query}".
-        
-        Return a JSON array of products with these fields:
-        - productName: Full product name
-        - price: Current price with currency symbol
-        - originalPrice: Original price before discount (if available)
-        - discount: Discount percentage (if available)
-        - imageUrl: URL of the product image
-        - url: URL to the product page
-        - rating: Product rating (if available)
-        
-        Only include products that are relevant to the search query.
-        Format your response as valid JSON only.
-        
-        HTML Content:
-        ${relevantContent}
-      `;
-      
-      // Call the Groq API
-      const response = await this.callGroqAPI([
-        { role: 'system', content: 'You are an expert at extracting structured product data from HTML content.' },
-        { role: 'user', content: prompt }
-      ], {
-        temperature: 0.2,
-        max_tokens: 2048
-      });
-      
-      // Extract the enhanced data
-      const enhancedData = response.choices[0].message.content;
-      
-      return {
-        success: true,
-        enhancedData,
-        rawResponse: response
-      };
+      const imageBuffer = fs.readFileSync(imagePath);
+      return crypto.createHash('md5').update(imageBuffer).digest('hex');
     } catch (error) {
-      console.error('Error enhancing web scraping:', error);
+      console.error('Error generating image hash:', error);
+      return `error-${Date.now()}`;
+    }
+  }
+  
+  /**
+   * Process an image in base64 format
+   * @param {string} base64Image - Base64 encoded image
+   * @param {string} contentType - MIME type of the image
+   * @param {Object} options - Additional options
+   * @returns {Promise<Object>} - Product identification results
+   */
+  async processBase64Image(base64Image, contentType = 'image/jpeg', options = {}) {
+    try {
+      if (!base64Image) {
+        return {
+          success: false,
+          error: 'No image data provided',
+          suggestion: 'Please provide a valid base64 encoded image',
+          code: 'NO_IMAGE_DATA'
+        };
+      }
+      
+      // Clean the base64 string if it includes the data URL prefix
+      const base64Data = base64Image.replace(/^data:image\/\w+;base64,/, '');
+      
+      // Generate a hash for the image data
+      const imageHash = crypto.createHash('md5').update(base64Data).digest('hex');
+      
+      // Check cache first
+      const cacheKey = `${imageHash}::${this.userPrompts.productIdentification}`;
+      const cachedResponse = this.getFromCache('visionRequests', cacheKey);
+      
+      if (cachedResponse) {
+        console.log('Retrieved vision response from cache for base64 image');
+        
+        // Process the cached response
+        const responseText = cachedResponse.choices[0].message.content;
+        
+        try {
+          // Try to parse the JSON from the response
+          const jsonMatch = responseText.match(/```(?:json)?\n([\s\S]*?)\n```/) || 
+                           responseText.match(/{[\s\S]*?}/);
+                           
+          let productData;
+          if (jsonMatch) {
+            productData = JSON.parse(jsonMatch[1] || jsonMatch[0]);
+          } else {
+            productData = JSON.parse(responseText);
+          }
+          
+          // Normalize the product data
+          const normalizedData = this.normalizeProductData(productData);
+          
+          // Trigger search if needed
+          let searchResults = null;
+          if (options.autoSearch !== false) {
+            searchResults = await this.triggerProductSearch(normalizedData);
+          }
+          
+          return {
+            success: true,
+            productData: normalizedData,
+            rawResponse: responseText,
+            searchResults,
+            fromCache: true
+          };
+        } catch (parseError) {
+          console.error('Error parsing cached response:', parseError);
+          // Continue with API call if parsing fails
+        }
+      }
+      
+      // Create a temporary file to store the image
+      const tempDir = path.join(__dirname, '../../temp');
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+      
+      const extension = contentType.split('/')[1] || 'jpg';
+      const tempFilePath = path.join(tempDir, `${imageHash}.${extension}`);
+      
+      // Write the base64 data to a temporary file
+      fs.writeFileSync(tempFilePath, Buffer.from(base64Data, 'base64'));
+      
+      try {
+        // Process the image using the file-based method
+        const result = await this.identifyProductFromImage(tempFilePath, options);
+        
+        // Clean up the temporary file
+        fs.unlinkSync(tempFilePath);
+        
+        return result;
+      } catch (error) {
+        // Clean up the temporary file in case of error
+        if (fs.existsSync(tempFilePath)) {
+          fs.unlinkSync(tempFilePath);
+        }
+        
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error processing base64 image:', error);
       
       return {
         success: false,
-        error: error.message || 'Unknown error occurred during web scraping enhancement'
+        error: error.message || 'Unknown error processing base64 image',
+        suggestion: this.errorHandling.suggestion.generic,
+        code: 'BASE64_PROCESSING_ERROR'
       };
     }
   }
@@ -379,43 +437,65 @@ class GroqService {
   /**
    * Identify a product from an image
    * @param {string} imagePath - Path to image file
+   * @param {Object} options - Additional options
    * @returns {Promise<Object>} - Product identification results
    */
-  async identifyProductFromImage(imagePath) {
+  async identifyProductFromImage(imagePath, options = {}) {
     try {
+      // Validate image file
       if (!fs.existsSync(imagePath)) {
         return {
           success: false,
           error: 'Image file not found',
-          suggestion: 'Please upload a valid image file'
+          suggestion: this.errorHandling.suggestion.generic,
+          code: 'FILE_NOT_FOUND'
         };
       }
       
-      // More detailed prompt for better product identification
-      const prompt = `
-        Analyze this product image in detail and identify what it shows.
-        
-        Please provide the following information in JSON format:
-        1. product: The exact product name
-        2. brand: The brand name if visible
-        3. category: Product category (e.g., Electronics, Clothing, etc.)
-        4. features: 2-3 key features visible in the image
-        5. keywords: 5-8 specific search terms that would help find this exact product online
-        6. description: A brief description of what you see (30 words max)
-        
-        Format your response as valid JSON only.
-      `;
+      // Check image size
+      const stats = fs.statSync(imagePath);
+      if (stats.size > 20 * 1024 * 1024) { // 20MB limit
+        return {
+          success: false,
+          error: 'Image file is too large',
+          suggestion: 'Please upload an image smaller than 20MB',
+          code: 'FILE_TOO_LARGE'
+        };
+      }
+      
+      // Check image format
+      const imageExt = path.extname(imagePath).toLowerCase();
+      const supportedFormats = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+      if (!supportedFormats.includes(imageExt)) {
+        return {
+          success: false,
+          error: 'Unsupported image format',
+          suggestion: 'Please upload a JPG, PNG, WebP, or GIF image',
+          code: 'UNSUPPORTED_FORMAT'
+        };
+      }
+      
+      // Use external prompt template
+      const prompt = this.userPrompts.productIdentification;
       
       console.log('Calling Groq Vision API for product identification...');
       
+      // Log image analysis start in debug mode
+      if (this.debugMode) {
+        console.log(`Starting product identification for image: ${path.basename(imagePath)}`);
+      }
+      
       const response = await this.callGroqVisionAPI(imagePath, prompt, {
-        temperature: 0.3, // Slightly higher temperature for more detailed responses
-        max_tokens: 1500  // Increased token limit for more detailed analysis
+        temperature: 0.3,
+        max_tokens: 1500
       });
       
       // Extract the product data from the response
       const responseText = response.choices[0].message.content;
-      console.log('Raw response from Groq Vision API:', responseText);
+      
+      if (this.debugMode) {
+        console.log('Raw response from Groq Vision API:', responseText);
+      }
       
       try {
         // Try to parse the JSON from the response
@@ -431,27 +511,34 @@ class GroqService {
           productData = JSON.parse(responseText);
         }
         
-        // Ensure we have at least the basic fields
-        if (!productData.product) {
-          productData.product = 'Unknown product';
+        // Normalize the product data structure
+        const normalizedData = this.normalizeProductData(productData);
+        
+        console.log('Successfully parsed product data:', normalizedData);
+        
+        // Check if the product was actually identified
+        if (!normalizedData.product || normalizedData.product === 'Unknown product') {
+          return {
+            success: false,
+            error: this.errorHandling.noProductFound,
+            suggestion: this.errorHandling.suggestion.generic,
+            code: 'NO_PRODUCT_DETECTED',
+            partialData: normalizedData
+          };
         }
         
-        if (!productData.keywords) {
-          // Generate keywords from product name and category if not provided
-          const keywords = [];
-          if (productData.product) keywords.push(productData.product);
-          if (productData.brand) keywords.push(productData.brand);
-          if (productData.category) keywords.push(productData.category);
-          
-          productData.keywords = keywords.join(', ');
+        // Automatically trigger a search with the identified keywords
+        // Only if autoSearch option is enabled (default: true)
+        let searchResults = null;
+        if (options.autoSearch !== false) {
+          searchResults = await this.triggerProductSearch(normalizedData);
         }
-        
-        console.log('Successfully parsed product data:', productData);
         
         return {
           success: true,
-          productData,
-          rawResponse: responseText
+          productData: normalizedData,
+          rawResponse: responseText,
+          searchResults: searchResults
         };
       } catch (parseError) {
         console.error('Error parsing product identification response:', parseError);
@@ -487,169 +574,392 @@ class GroqService {
           keywords: keywords || `${product} ${brand} ${category}`.trim()
         };
         
-        console.log('Extracted product data using alternative method:', productData);
+        // Normalize the extracted data
+        const normalizedData = this.normalizeProductData(productData);
+        
+        console.log('Extracted product data using alternative method:', normalizedData);
+        
+        // Check if the product was actually identified
+        if (!normalizedData.product || normalizedData.product === 'Unknown product') {
+          return {
+            success: false,
+            error: this.errorHandling.noProductFound,
+            suggestion: this.errorHandling.suggestion.generic,
+            code: 'NO_PRODUCT_DETECTED',
+            partialData: normalizedData
+          };
+        }
+        
+        // Automatically trigger a search with the identified keywords
+        // Only if autoSearch option is enabled (default: true)
+        let searchResults = null;
+        if (options.autoSearch !== false) {
+          searchResults = await this.triggerProductSearch(normalizedData);
+        }
         
         return {
           success: true,
-          productData,
-          rawResponse: responseText
+          productData: normalizedData,
+          rawResponse: responseText,
+          searchResults: searchResults
         };
       }
     } catch (error) {
       console.error('Error identifying product from image:', error);
       
-      // Check if it's an API key issue
-      if (error.message && error.message.includes('API key')) {
+      // Enhanced visual feedback on errors with error codes
+      if (error.message && error.message.toLowerCase().includes('blur')) {
+        return {
+          success: false,
+          error: this.errorHandling.blurredImage,
+          suggestion: this.errorHandling.suggestion.blurredImage,
+          code: 'BLURRED_IMAGE'
+        };
+      } else if (error.message && error.message.toLowerCase().includes('resolution')) {
+        return {
+          success: false,
+          error: this.errorHandling.lowResolution,
+          suggestion: this.errorHandling.suggestion.lowResolution,
+          code: 'LOW_RESOLUTION'
+        };
+      } else if (error.message && error.message.toLowerCase().includes('angle')) {
+        return {
+          success: false,
+          error: 'Poor image angle for product identification',
+          suggestion: this.errorHandling.suggestion.badAngle,
+          code: 'BAD_ANGLE'
+        };
+      } else if (error.message && error.message.toLowerCase().includes('partial')) {
+        return {
+          success: false,
+          error: 'Only partial product visible in image',
+          suggestion: this.errorHandling.suggestion.partial,
+          code: 'PARTIAL_PRODUCT'
+        };
+      } else if (error.message && error.message.includes('API key')) {
         return {
           success: false,
           error: 'API key configuration issue. Please check your Groq API key.',
-          suggestion: 'Contact support to verify your API configuration.'
+          suggestion: 'Contact support to verify your API configuration.',
+          code: 'API_KEY_ERROR'
         };
       }
       
       return {
         success: false,
         error: error.message || 'Unknown error occurred during product identification',
-        suggestion: 'There was an issue processing your image. Try a different image or specify the product keywords manually.'
+        suggestion: this.errorHandling.suggestion.generic,
+        code: 'UNKNOWN_ERROR'
+      };
+    }
+  }
+
+  /**
+   * Normalize product data to a standard structure
+   * @param {Object} productData - Raw product data
+   * @returns {Object} - Normalized product data
+   */
+  normalizeProductData(productData) {
+    // Ensure we have at least the basic fields
+    const normalized = {
+      product: productData.product || productData.name || productData.title || 'Unknown product',
+      brand: productData.brand || productData.manufacturer || '',
+      category: productData.category || productData.productCategory || productData.type || '',
+      features: productData.features || productData.keyFeatures || [],
+      description: productData.description || '',
+      keywords: []
+    };
+    
+    // Process keywords - could be string or array
+    if (typeof productData.keywords === 'string') {
+      normalized.keywords = productData.keywords.split(/,|;/).map(k => k.trim());
+    } else if (Array.isArray(productData.keywords)) {
+      normalized.keywords = productData.keywords;
+    } else {
+      // Generate keywords from product name and category if not provided
+      const keywords = [];
+      if (normalized.product) keywords.push(normalized.product);
+      if (normalized.brand) keywords.push(normalized.brand);
+      if (normalized.category) keywords.push(normalized.category);
+      
+      normalized.keywords = keywords;
+    }
+    
+    // Ensure keywords are unique and non-empty
+    normalized.keywords = [...new Set(normalized.keywords.filter(k => k))];
+    
+    // Generate search string
+    normalized.searchString = [
+      normalized.product,
+      normalized.brand,
+      ...normalized.keywords.slice(0, 3)
+    ].filter(Boolean).join(' ');
+    
+    return normalized;
+  }
+  
+  /**
+   * Trigger a product search based on identified keywords
+   * @param {Object} productData - Normalized product data
+   * @returns {Promise<Object>} - Search results
+   */
+  async triggerProductSearch(productData) {
+    try {
+      // Use the search string from normalized product data
+      const searchQuery = productData.searchString || 
+                         productData.keywords?.join(' ') || 
+                         productData.product;
+      
+      console.log(`Triggering product search for: "${searchQuery}"`);
+      
+      // Log search details in debug mode
+      if (this.debugMode) {
+        const debugInfo = {
+          timestamp: new Date().toISOString(),
+          productData,
+          searchQuery
+        };
+        
+        fs.writeFileSync(
+          path.join(this.debugDir, `search_trigger_${Date.now()}.json`),
+          JSON.stringify(debugInfo, null, 2)
+        );
+      }
+      
+      // Check if scraperService is available
+      if (scraperService) {
+        try {
+          console.log('Using scraper service for product search');
+          
+          // Use the searchProducts method from scraperService
+          const searchResults = await scraperService.searchProducts(searchQuery);
+          
+          // Log search results in debug mode
+          if (this.debugMode) {
+            fs.writeFileSync(
+              path.join(this.debugDir, `search_results_${Date.now()}.json`),
+              JSON.stringify({
+                query: searchQuery,
+                resultsCount: searchResults.products?.length || 0,
+                success: searchResults.success
+              }, null, 2)
+            );
+          }
+          
+          return {
+            success: true,
+            searchQuery,
+            searchResults
+          };
+        } catch (scraperError) {
+          console.error('Error using scraper service:', scraperError);
+          
+          // Return partial success with error info
+          return {
+            success: false,
+            searchQuery,
+            error: scraperError.message,
+            pending: true
+          };
+        }
+      } else {
+        console.log('Scraper service not available, returning search query only');
+        
+        // Return pending status when scraper service is not available
+        return {
+          success: true,
+          searchQuery,
+          pending: true
+        };
+      }
+    } catch (error) {
+      console.error('Error triggering product search:', error);
+      
+      return {
+        success: false,
+        error: error.message,
+        suggestion: 'Try searching with more specific keywords'
       };
     }
   }
   
   /**
-   * Extract relevant content from HTML to reduce token usage
-   * @param {string} html - Full HTML content
-   * @param {string} query - Search query
-   * @returns {string} - Extracted relevant content
+   * Process multiple images of the same product for better accuracy
+   * @param {Array<string>} imagePaths - Array of paths to images
+   * @param {Object} options - Additional options
+   * @returns {Promise<Object>} - Consolidated product identification
    */
-  extractRelevantContent(html, query) {
-    try {
-      // Maximum content size (characters) to send to API
-      const MAX_CONTENT_SIZE = 3000; // Drastically reduced from 12000 to stay under token limits
-      
-      let $ = cheerio.load(html);
-      let relevantContent = "";
-      
-      // Extract product-specific elements
-      const productElements = [
-        // Product containers with direct product info
-        $('.product, .item, .product-item, [data-component-type="s-search-result"]'),
-        
-        // E-commerce specific elements - Amazon
-        $('#productTitle, #priceblock_ourprice, .a-price, .a-offscreen, #feature-bullets'),
-        
-        // Flipkart elements
-        $('._4rR01T, ._30jeq3, ._1AtVbE'),
-        
-        // Generic product elements
-        $('[class*="product"], [class*="item"], [class*="price"]')
-      ];
-      
-      // Focus on extracting only critical product data
-      for (const elements of productElements) {
-        elements.each((i, element) => {
-          const elementText = $(element).text().trim();
-          const elementHtml = $(element).html();
-          
-          // Only include elements that are likely product related
-          if (elementText.length > 0 && 
-             (elementText.toLowerCase().includes(query.toLowerCase()) || 
-              elementText.match(/₹|rs\.?|price|₨|inr|\$/i))) {
-            relevantContent += elementHtml + "\n";
-          }
-          
-          if (relevantContent.length > MAX_CONTENT_SIZE) {
-            return false; // Break the loop if we've collected enough
-          }
-        });
-        
-        if (relevantContent.length > MAX_CONTENT_SIZE) {
-          break; // Break the outer loop if we've collected enough
-        }
-      }
-      
-      // If we didn't get enough relevant content, try direct product selectors
-      if (relevantContent.length < 500) {
-        // Common product selector patterns
-        const productSelectors = [
-          '[data-component-type="s-search-result"]', // Amazon
-          '._1AtVbE', // Flipkart 
-          '.product-item', // Generic
-          '.s-result-item', // Amazon
-          '.product', // Generic
-          '[class*="product-"]', // Generic pattern
-          '[class*="price"]' // Price elements
-        ];
-        
-        let tempContent = "";
-        for (const selector of productSelectors) {
-          $(selector).each((i, element) => {
-            // Limit to first few products only
-            if (i < 3) {
-              tempContent += $(element).html() + "\n";
-            }
-          });
-          
-          if (tempContent.length > 500) {
-            break;
-          }
-        }
-        
-        if (tempContent.length > relevantContent.length) {
-          relevantContent = tempContent;
-        }
-      }
-      
-      // Ensure we don't exceed maximum size
-      if (relevantContent.length > MAX_CONTENT_SIZE) {
-        relevantContent = relevantContent.substring(0, MAX_CONTENT_SIZE);
-      }
-      
-      // Add a note about truncation
-      if (relevantContent.length < html.length) {
-        relevantContent += "\n\n[Content truncated for token efficiency]";
-      }
-      
-      return relevantContent;
-    } catch (error) {
-      console.error('Error extracting relevant content:', error);
-      // Return a very small truncated version as fallback
-      return html.substring(0, 3000) + "\n\n[Content was truncated]";
+  async processMultipleImages(imagePaths, options = {}) {
+    if (!Array.isArray(imagePaths) || imagePaths.length === 0) {
+      return {
+        success: false,
+        error: 'No valid images provided',
+        suggestion: 'Please provide at least one product image',
+        code: 'NO_IMAGES'
+      };
     }
+    
+    // Limit the number of images to process
+    const maxImages = options.maxImages || 3;
+    const imagesToProcess = imagePaths.slice(0, maxImages);
+    
+    if (this.debugMode) {
+      console.log(`Processing ${imagesToProcess.length} images out of ${imagePaths.length} provided`);
+    }
+    
+    // Process each image in parallel for faster results
+    const imagePromises = imagesToProcess.map(imagePath => {
+      if (fs.existsSync(imagePath)) {
+        // Disable auto search for individual images to avoid multiple searches
+        return this.identifyProductFromImage(imagePath, { autoSearch: false })
+          .then(result => {
+            if (result.success) {
+              return {
+                path: imagePath,
+                data: result.productData,
+                hash: this.getImageHash(imagePath)
+              };
+            }
+            return null;
+          })
+          .catch(error => {
+            console.error(`Error processing image ${imagePath}:`, error);
+            return null;
+          });
+      }
+      return Promise.resolve(null);
+    });
+    
+    // Wait for all image processing to complete
+    const imageResults = await Promise.all(imagePromises);
+    
+    // Filter out null results
+    const validResults = imageResults.filter(result => result !== null);
+    
+    if (validResults.length === 0) {
+      return {
+        success: false,
+        error: 'Could not identify the product from any of the provided images',
+        suggestion: this.errorHandling.suggestion.generic,
+        code: 'NO_PRODUCT_DETECTED'
+      };
+    }
+    
+    // Consolidate results from multiple images
+    const consolidated = this.consolidateMultiImageResults(validResults);
+    
+    // Log consolidated results in debug mode
+    if (this.debugMode) {
+      fs.writeFileSync(
+        path.join(this.debugDir, `multi_image_results_${Date.now()}.json`),
+        JSON.stringify({
+          imageCount: validResults.length,
+          totalImages: imagePaths.length,
+          imageHashes: validResults.map(r => r.hash),
+          consolidated
+        }, null, 2)
+      );
+    }
+    
+    // Trigger a search with the consolidated data
+    let searchResults = null;
+    if (options.autoSearch !== false) {
+      searchResults = await this.triggerProductSearch(consolidated);
+    }
+    
+    return {
+      success: true,
+      productData: consolidated,
+      imageCount: validResults.length,
+      totalImages: imagePaths.length,
+      searchResults,
+      confidence: validResults.length / Math.min(imagePaths.length, maxImages)
+    };
   }
   
   /**
-   * Enhance web scraping results using AI
-   * @param {string} query - Search query or product name
-   * @param {string} htmlContent - HTML content from the web page
-   * @returns {Promise<Object>} - Enhanced data extracted from HTML
+   * Consolidate results from multiple images of the same product
+   * @param {Array<Object>} results - Results from multiple images
+   * @returns {Object} - Consolidated product data
    */
-  async enhanceWebScraping(query, htmlContent) {
+  consolidateMultiImageResults(results) {
+    // Start with the first result as base
+    const consolidated = { ...results[0].data };
+    
+    // Keep track of all keywords and features
+    const allKeywords = new Set([...consolidated.keywords]);
+    const allFeatures = new Set([...consolidated.features]);
+    
+    // Consolidate data from other results
+    for (let i = 1; i < results.length; i++) {
+      const data = results[i].data;
+      
+      // Add new keywords
+      data.keywords.forEach(keyword => allKeywords.add(keyword));
+      
+      // Add new features
+      data.features.forEach(feature => allFeatures.add(feature));
+      
+      // Keep the longest description
+      if (data.description && data.description.length > consolidated.description.length) {
+        consolidated.description = data.description;
+      }
+    }
+    
+    // Update consolidated data
+    consolidated.keywords = [...allKeywords];
+    consolidated.features = [...allFeatures];
+    
+    // Regenerate search string
+    consolidated.searchString = [
+      consolidated.product,
+      consolidated.brand,
+      ...consolidated.keywords.slice(0, 5)
+    ].filter(Boolean).join(' ');
+    
+    return consolidated;
+  }
+  
+  /**
+   * Enhance web scraping with AI analysis using external prompts
+   * @param {string} query - Search query
+   * @param {string} html - HTML content
+   * @returns {Promise<Object>} - Enhanced data
+   */
+  async enhanceWebScraping(query, html) {
     try {
-      // Extract key content sections to drastically reduce token usage
-      const extractedContent = this.extractRelevantContent(htmlContent, query);
+      console.log(`Enhancing web scraping for query: "${query}"`);
       
-      // Create a very token-efficient prompt
-      const userPrompt = `Extract key product data for "${query}" from HTML. Return JSON only with: productName, currentPrice, discount.`;
+      // Extract relevant content to reduce token usage
+      const relevantContent = this.extractRelevantContent(html, query);
       
-      const messages = [
-        {
-          role: 'system',
-          content: this.systemPrompts.webScraping
-        },
-        {
-          role: 'user',
-          content: `${userPrompt}\n\nHTML:\n${extractedContent}`
-        }
-      ];
+      // Use prompt template and replace the query
+      const prompt = this.userPrompts.webScraping.replace('{{QUERY}}', query);
       
-      const response = await this.callGroqAPI(messages, {
-        temperature: 0.3,
-        max_tokens: 1024 // Reduced from 4096 to save tokens
+      // Call the Groq API
+      const response = await this.callGroqAPI([
+        { role: 'system', content: this.systemPrompts.webScraping },
+        { role: 'user', content: prompt + '\n\nHTML Content:\n' + relevantContent }
+      ], {
+        temperature: 0.2,
+        max_tokens: 2048
       });
+      
+      // Extract the enhanced data
+      const enhancedData = response.choices[0].message.content;
+      
+      // Try to parse as JSON
+      let parsedData;
+      try {
+        parsedData = JSON.parse(enhancedData);
+      } catch (e) {
+        console.warn('Response was not valid JSON:', e);
+      }
       
       return {
         success: true,
-        enhancedData: response.choices[0].message.content
+        enhancedData: parsedData || enhancedData,
+        rawResponse: response
       };
     } catch (error) {
       console.error('Error enhancing web scraping:', error);
@@ -663,7 +973,7 @@ class GroqService {
   
   /**
    * Generate a comprehensive product summary from consolidated data
-   * @param {Object} consolidatedData - Consolidated product data from multiple sources
+   * @param {Object} consolidatedData - Consolidated product data
    * @returns {Promise<Object>} - Detailed product summary and analysis
    */
   async generateProductSummary(consolidatedData) {
@@ -682,6 +992,12 @@ class GroqService {
         }
       };
       
+      // Use the template and replace the product data placeholder
+      const userPrompt = this.userPrompts.productSummary.replace(
+        '{{PRODUCT_DATA}}', 
+        JSON.stringify(simplifiedData, null, 2)
+      );
+      
       const messages = [
         {
           role: 'system',
@@ -689,13 +1005,13 @@ class GroqService {
         },
         {
           role: 'user',
-          content: `Generate a brief product summary for:\n${JSON.stringify(simplifiedData, null, 2)}\n\nInclude: product overview, price comparison, best value, key features, and buying recommendation.`
+          content: userPrompt
         }
       ];
       
       const response = await this.callGroqAPI(messages, {
         temperature: 0.5,
-        max_tokens: 2048 // Reduced from 4096
+        max_tokens: 2048
       });
       
       const summaryContent = response.choices[0].message.content;
@@ -726,7 +1042,7 @@ class GroqService {
       };
     }
   }
-  
+
   /**
    * Extract a section from markdown content
    * @param {string} content - Markdown content
@@ -757,6 +1073,208 @@ class GroqService {
     } catch (error) {
       console.error('Error extracting section:', error);
       return '';
+    }
+  }
+  
+  /**
+   * Extract relevant content from HTML to reduce token usage
+   * @param {string} html - HTML content
+   * @param {string} query - Search query
+   * @returns {string} - Extracted relevant content
+   */
+  extractRelevantContent(html, query) {
+    try {
+      if (!html) return '';
+      
+      const $ = cheerio.load(html);
+      
+      // Remove unnecessary elements
+      $('script, style, iframe, noscript, svg, path, footer, nav, header, aside').remove();
+      
+      // Extract product elements based on common selectors
+      const productSelectors = [
+        '.product', '.item', '.product-item', '.product-card', '.product-container',
+        '[data-product]', '[data-item]', '[data-sku]', '[data-pid]',
+        '.card', '.listing', '.result', '.search-result'
+      ];
+      
+      let relevantContent = '';
+      
+      // Try to find product elements
+      for (const selector of productSelectors) {
+        const elements = $(selector);
+        if (elements.length > 0) {
+          elements.each((i, el) => {
+            relevantContent += $(el).text() + '\n';
+          });
+          
+          // If we found enough content, stop looking
+          if (relevantContent.length > 1000) break;
+        }
+      }
+      
+      // If no product elements found, extract main content
+      if (relevantContent.length < 100) {
+        relevantContent = $('main, #main, #content, .content, .main-content').text();
+      }
+      
+      // If still no content, extract body
+      if (relevantContent.length < 100) {
+        relevantContent = $('body').text();
+      }
+      
+      // Clean up the text
+      relevantContent = relevantContent
+        .replace(/\s+/g, ' ')
+        .replace(/\n+/g, '\n')
+        .trim();
+      
+      // Limit the content length to reduce token usage
+      const maxLength = 4000;
+      if (relevantContent.length > maxLength) {
+        relevantContent = relevantContent.substring(0, maxLength) + '...';
+      }
+      
+      return relevantContent;
+    } catch (error) {
+      console.error('Error extracting relevant content:', error);
+      return html.substring(0, 4000); // Return truncated HTML as fallback
+    }
+  }
+  
+  /**
+   * Log debug information
+   * @param {string} type - Type of debug info
+   * @param {Object} data - Debug data
+   */
+  logDebug(type, data) {
+    if (!this.debugMode) return;
+    
+    try {
+      const timestamp = Date.now();
+      const filename = path.join(this.debugDir, `${type}_${timestamp}.json`);
+      
+      fs.writeFileSync(filename, JSON.stringify(data, null, 2));
+    } catch (error) {
+      console.error(`Error logging debug info for ${type}:`, error);
+    }
+  }
+  
+  /**
+   * Enhance product data with AI-generated details
+   * @param {Object} productData - Basic product data
+   * @returns {Promise<Object>} - Enhanced product data
+   */
+  async enhanceProductData(productData) {
+    try {
+      if (!productData || !productData.product) {
+        return {
+          success: false,
+          error: 'Invalid product data provided',
+          code: 'INVALID_PRODUCT_DATA'
+        };
+      }
+      
+      // Log the enhancement request
+      this.logDebug('enhance_request', { productData });
+      
+      // Use the template and replace the product data placeholder
+      const userPrompt = this.userPrompts.productEnhancement.replace(
+        '{{PRODUCT_DATA}}', 
+        JSON.stringify(productData, null, 2)
+      );
+      
+      const messages = [
+        {
+          role: 'system',
+          content: this.systemPrompts.productEnhancement
+        },
+        {
+          role: 'user',
+          content: userPrompt
+        }
+      ];
+      
+      const response = await this.callGroqAPI(messages, {
+        temperature: 0.4,
+        max_tokens: 2048
+      });
+      
+      const enhancedContent = response.choices[0].message.content;
+      
+      // Try to parse the JSON from the response
+      try {
+        // First try to extract a JSON object if it's wrapped in markdown code blocks
+        const jsonMatch = enhancedContent.match(/```(?:json)?\n([\s\S]*?)\n```/) || 
+                         enhancedContent.match(/{[\s\S]*?}/);
+                         
+        let enhancedData;
+        if (jsonMatch) {
+          enhancedData = JSON.parse(jsonMatch[1] || jsonMatch[0]);
+        } else {
+          // If no JSON found, try parsing the whole response text
+          enhancedData = JSON.parse(enhancedContent);
+        }
+        
+        // Merge the enhanced data with the original data
+        const mergedData = {
+          ...productData,
+          ...enhancedData,
+          // Ensure we keep the original product name if the enhanced one is empty
+          product: enhancedData.product || productData.product,
+          // Merge keywords from both sources
+          keywords: [...new Set([
+            ...(Array.isArray(productData.keywords) ? productData.keywords : []),
+            ...(Array.isArray(enhancedData.keywords) ? enhancedData.keywords : [])
+          ])],
+          // Merge features from both sources
+          features: [...new Set([
+            ...(Array.isArray(productData.features) ? productData.features : []),
+            ...(Array.isArray(enhancedData.features) ? enhancedData.features : [])
+          ])],
+          // Add enhancement metadata
+          enhanced: true,
+          enhancedAt: new Date().toISOString()
+        };
+        
+        // Regenerate search string with enhanced data
+        mergedData.searchString = [
+          mergedData.product,
+          mergedData.brand,
+          ...(mergedData.searchTerms || []),
+          ...(mergedData.keywords.slice(0, 5) || [])
+        ].filter(Boolean).join(' ');
+        
+        // Log the enhancement result
+        this.logDebug('enhance_result', { 
+          original: productData,
+          enhanced: enhancedData,
+          merged: mergedData
+        });
+        
+        return {
+          success: true,
+          productData: mergedData,
+          rawResponse: enhancedContent
+        };
+      } catch (parseError) {
+        console.error('Error parsing enhanced product data:', parseError);
+        
+        return {
+          success: false,
+          error: 'Failed to parse enhanced product data',
+          rawResponse: enhancedContent,
+          code: 'PARSE_ERROR'
+        };
+      }
+    } catch (error) {
+      console.error('Error enhancing product data:', error);
+      
+      return {
+        success: false,
+        error: error.message || 'Unknown error occurred during product enhancement',
+        code: 'ENHANCEMENT_ERROR'
+      };
     }
   }
 }
