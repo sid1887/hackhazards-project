@@ -10,11 +10,50 @@ const UserAgent = require('user-agents');
 const { gotScraping } = require('got-scraping');
 const fs = require('fs');
 const path = require('path');
-const pLimit = require('p-limit').default; // Fix: Use CommonJS default export
 const NodeCache = require('node-cache');
 const { SocksProxyAgent } = require('socks-proxy-agent');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const playwright = require('playwright');
+
+// A simpler implementation of pLimit that doesn't rely on the ES module
+function createPLimit(concurrency) {
+  const queue = [];
+  let activeCount = 0;
+
+  const next = () => {
+    activeCount--;
+    if (queue.length > 0) {
+      queue.shift()();
+    }
+  };
+
+  const run = async (fn, resolve, args) => {
+    activeCount++;
+    try {
+      const result = await fn(...args);
+      resolve(result);
+    } catch (error) {
+      resolve(Promise.reject(error));
+    }
+    next();
+  };
+
+  const enqueue = (fn, resolve, args) => {
+    queue.push(() => run(fn, resolve, args));
+  };
+
+  const generator = (fn, ...args) => new Promise(resolve => {
+    if (activeCount < concurrency) {
+      run(fn, resolve, args);
+    } else {
+      enqueue(fn, resolve, args);
+    }
+  });
+
+  generator.activeCount = () => activeCount;
+  generator.pendingCount = () => queue.length;
+  return generator;
+}
 
 // Debug mode flag
 const DEBUG_MODE = process.env.DEBUG_SCRAPING === 'true';
@@ -61,10 +100,8 @@ class DirectApiService {
       checkperiod: 60 // Check for expired keys every minute
     });
     
-    // Promise concurrency limiter - make sure to call pLimit as a function 
-    // Fix: Create a limiter by calling pLimit as a function
-    const limiter = pLimit(MAX_CONCURRENT_REQUESTS);
-    this.requestLimiter = limiter;
+    // Use our simple built-in implementation instead of the ES module
+    this.requestLimiter = createPLimit(MAX_CONCURRENT_REQUESTS);
     
     // Headless browser instances
     this.browsers = {
@@ -107,13 +144,18 @@ class DirectApiService {
       croma: {
         name: 'Croma',
         endpoints: {
-          search: 'https://api.croma.com/searchservices/v1/search',
-          product: 'https://api.croma.com/productservices/v1/product'
+          search: 'https://www.croma.com/mobilesite/search',
+          catalog: 'https://api.croma.com/searchservices/v1/search',
+          product: 'https://www.croma.com/mobilesite/product/',
+          mobileSearch: 'https://www.croma.com/mobilesite/search/mobileapi'
         },
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-          'Accept': 'application/json',
-          'Referer': 'https://www.croma.com/'
+          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1',
+          'Accept': 'application/json,text/html',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Referer': 'https://www.croma.com/',
+          'x-device-type': 'mobile',
+          'x-requested-with': 'XMLHttpRequest'
         },
         responseParser: '_parseCromaApiResponse'
       },
@@ -845,8 +887,102 @@ class DirectApiService {
    * @private
    */
   _parseCromaApiResponse(data) {
-    // Placeholder implementation
-    return [];
+    try {
+      // Check if we have a mobile site response
+      if (data && data.searchResultsVO && data.searchResultsVO.products) {
+        return this._parseCromaMobileSiteResponse(data);
+      }
+      
+      // Check for regular API response format
+      if (data && data.products && Array.isArray(data.products)) {
+        return data.products.map(product => {
+          const productUrl = product.url || `/p/${product.code}`;
+          
+          // Extract price data
+          let price = 0;
+          if (product.price && product.price.value) {
+            price = parseFloat(product.price.value);
+          } else if (product.sellingPrice) {
+            price = parseFloat(product.sellingPrice);
+          }
+          
+          return {
+            id: product.code || product.productId,
+            name: product.name || product.displayName,
+            url: productUrl.startsWith('http') ? productUrl : `https://www.croma.com${productUrl}`,
+            image: product.plpImage || (product.images && product.images.length > 0 ? product.images[0] : ''),
+            price: price,
+            originalPrice: parseFloat(product.mrp || price),
+            source: 'croma',
+            fetch_strategy: 'api_response_parser'
+          };
+        }).filter(p => p.id && p.name);
+      }
+      
+      return [];
+    } catch (error) {
+      console.error('Error parsing Croma API response:', error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Parse Croma mobile site response format
+   * @param {Object} data - Response data
+   * @returns {Array} Parsed products
+   * @private
+   */
+  _parseCromaMobileSiteResponse(data) {
+    try {
+      const products = data.searchResultsVO.products;
+      
+      return products.map(product => {
+        // Extract URL and ensure it's complete
+        const url = product.productURL || `/product/${product.productId}`;
+        
+        // Extract price information
+        let price = 0;
+        if (product.sellingPrice) {
+          price = parseFloat(product.sellingPrice);
+        } else if (product.price) {
+          price = parseFloat(product.price);
+        }
+        
+        // Extract original price
+        let originalPrice = price;
+        if (product.mrp) {
+          originalPrice = parseFloat(product.mrp);
+        } else if (product.listPrice) {
+          originalPrice = parseFloat(product.listPrice);
+        }
+        
+        // Calculate discount if not provided
+        let discountPercentage = 0;
+        if (product.discount) {
+          discountPercentage = parseInt(product.discount, 10);
+        } else if (originalPrice > price && price > 0) {
+          discountPercentage = Math.round(((originalPrice - price) / originalPrice) * 100);
+        }
+        
+        return {
+          id: product.productId || product.code,
+          name: product.productName || product.name,
+          url: url.startsWith('http') ? url : `https://www.croma.com${url}`,
+          image: product.imageURL || product.image,
+          price: price,
+          originalPrice: originalPrice,
+          discountPercentage: discountPercentage,
+          rating: parseFloat(product.rating || 0),
+          ratingCount: parseInt(product.reviewCount || 0, 10),
+          source: 'croma',
+          available: true,
+          fetch_strategy: 'mobile_site_parser'
+        };
+      }).filter(p => p.id && p.name);
+    } catch (error) {
+      console.error('Error parsing Croma mobile site response:', error.message);
+      return [];
+    }
   }
 
   /**
@@ -902,1215 +1038,299 @@ class DirectApiService {
           return [];
       }
     } catch (error) {
-      console.error(`GotScraping fast fetch failed for ${retailerKey}:`, error.message);
+      console.error(`GotScraping fast fetch failed for ${retailerKey}: ${error.message}`);
       return [];
     }
   }
 
   /**
-   * Fast fetch for Flipkart using direct product search API
-   * @param {string} query - Search query
-   * @returns {Promise<Array>} - Array of products
-   * @private
-   */
-  async _fastFetchFlipkart(query) {
-    console.log(`Executing optimized Flipkart product search API fetch for "${query}"`);
-    
-    try {
-      // From the logs, we can see GraphQL API is giving bifrost errors at status 533
-      // Try direct product search API instead
-      const encodedQuery = encodeURIComponent(query);
-      const url = `https://www.flipkart.com/_api/product-service/search?query=${encodedQuery}&page=1`;
-      
-      // Enhanced headers that match browser behavior
-      const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36';
-      const headers = {
-        'User-Agent': userAgent,
-        'Accept': 'application/json',
-        'Accept-Language': 'en-IN,en;q=0.9',
-        'Origin': 'https://www.flipkart.com',
-        'Referer': `https://www.flipkart.com/search?q=${encodedQuery}`,
-        'Cache-Control': 'max-age=0',
-        'Connection': 'keep-alive',
-        'X-User-ID': '',
-        'X-Source': 'searchPage'
-      };
-
-      console.log('Flipkart product API request:', {url, headers});
-      
-      // Make request with gotScraping
-      const response = await gotScraping.get(url, {
-        headers: headers,
-        responseType: 'json',
-        timeout: 10000
-      });
-
-      // Debug response status and headers
-      console.log('Flipkart product API response status:', response.statusCode);
-      
-      // Log a sample of the response data
-      const responseData = response.body;
-      console.log('Flipkart product API response sample:', 
-        typeof responseData, 
-        JSON.stringify(responseData).substring(0, 200) + '...');
-
-      // Save full response for debugging if enabled
-      if (DEBUG_MODE) {
-        this._saveDebugData('flipkart', 'product-api-response', responseData);
-      }
-
-      // Extract products from response
-      let products = [];
-      if (responseData && responseData.data && responseData.data.products) {
-        products = responseData.data.products.map(product => {
-          return {
-            id: product.productId || product.id,
-            name: product.title || product.name,
-            url: `https://www.flipkart.com${product.url || `/p/${product.productId}`}`,
-            image: product.imageUrl || product.image,
-            price: product.price?.current || product.sellingPrice || 0,
-            originalPrice: product.price?.original || product.mrp || product.price?.current || 0,
-            discountPercentage: product.discountPercentage || 0,
-            rating: product.rating?.average || 0,
-            ratingCount: product.rating?.count || 0,
-            source: 'flipkart',
-            available: true,
-            fetch_strategy: 'product_search_api'
-          };
-        }).filter(p => p.id && p.name); // Filter out incomplete products
-      }
-
-      console.log(`Successfully retrieved ${products.length} products from Flipkart Product Search API`);
-      
-      // If direct API fails (returns empty), try the mobile API
-      if (products.length === 0) {
-        console.log('Flipkart Product Search API returned no products, trying mobile API endpoint');
-        return await this._fallbackFlipkartMobileApi(query);
-      }
-      
-      return products;
-      
-    } catch (error) {
-      console.error(`Error in Flipkart Product Search API fetch:`, error.message);
-      console.log('Attempting Flipkart mobile API fallback');
-      return await this._fallbackFlipkartMobileApi(query);
-    }
-  }
-
-  /**
-   * Fallback to Flipkart Mobile API
-   * @param {string} query - Search query
-   * @returns {Promise<Array>} - Array of products
-   * @private
-   */
-  async _fallbackFlipkartMobileApi(query) {
-    console.log(`Executing Flipkart mobile API fallback for "${query}"`);
-    
-    try {
-      const encodedQuery = encodeURIComponent(query);
-      const url = `https://www.flipkart.com/mobile-api/1/search?q=${encodedQuery}&page=1`;
-      
-      // Use mobile user agent
-      const userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 FKUA/website/42/website/Mobile';
-      const headers = {
-        'User-Agent': userAgent,
-        'Accept': 'application/json',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Origin': 'https://www.flipkart.com',
-        'Referer': `https://www.flipkart.com/search?q=${encodedQuery}`,
-        'X-User-Agent': userAgent,
-        'X-Device-Type': 'mobile'
-      };
-      
-      console.log('Flipkart mobile API request:', {url, headers});
-      
-      // Make request with gotScraping
-      const response = await gotScraping.get(url, {
-        headers: headers,
-        responseType: 'json',
-        timeout: 8000
-      });
-      
-      // Log response status
-      console.log('Flipkart mobile API response status:', response.statusCode);
-      
-      // Log a sample of the response data
-      const responseData = response.body;
-      console.log('Flipkart mobile API response sample:', 
-        typeof responseData, 
-        JSON.stringify(responseData).substring(0, 200) + '...');
-      
-      // Save for debugging
-      if (DEBUG_MODE) {
-        this._saveDebugData('flipkart', 'mobile-api-response', responseData);
-      }
-      
-      // Process response
-      let products = [];
-      if (responseData && responseData.results && Array.isArray(responseData.results)) {
-        products = responseData.results
-          .filter(result => result.type === 'PRODUCT')
-          .map(result => {
-            const product = result.data;
-            return {
-              id: product.id,
-              name: product.title,
-              url: `https://www.flipkart.com${product.url || `/p/${product.id}`}`,
-              image: product.image,
-              price: product.price?.value || 0,
-              originalPrice: product.originalPrice?.value || product.price?.value || 0,
-              discountPercentage: product.discount || 0,
-              rating: product.rating?.value || 0,
-              ratingCount: product.rating?.count || 0,
-              source: 'flipkart',
-              available: true,
-              fetch_strategy: 'mobile_api'
-            };
-          });
-      }
-      
-      console.log(`Successfully retrieved ${products.length} products from Flipkart Mobile API`);
-      
-      // If mobile API fails, fall back to HTML scraping
-      if (products.length === 0) {
-        console.log('Flipkart Mobile API returned no products, falling back to HTML scraping');
-        return await this._fallbackFlipkartHtmlScrape(query);
-      }
-      
-      return products;
-    } catch (error) {
-      console.error(`Error in Flipkart mobile API fallback:`, error.message);
-      console.log('Attempting fallback to HTML scraping as last resort');
-      return await this._fallbackFlipkartHtmlScrape(query);
-    }
-  }
-
-  /**
-   * Fallback method for Flipkart to scrape HTML when APIs fail
-   * @param {string} query - Search query
-   * @returns {Promise<Array>} - Array of products
-   * @private 
-   */
-  async _fallbackFlipkartHtmlScrape(query) {
-    console.log(`Executing Flipkart HTML scrape fallback for "${query}"`);
-    
-    try {
-      const encodedQuery = encodeURIComponent(query);
-      const url = `https://www.flipkart.com/search?q=${encodedQuery}`;
-      
-      // Prepare headers with enhanced stealth
-      const userAgent = this._getRandomUserAgent();
-      const headers = {
-        'User-Agent': userAgent,
-        'Referer': 'https://www.flipkart.com/',
-        'Accept': 'text/html,application/xhtml+xml,application/xml',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive',
-        'Cache-Control': 'no-cache',
-        'Upgrade-Insecure-Requests': '1',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'same-origin',
-        'Sec-Fetch-User': '?1',
-        'DNT': '1'
-      };
-
-      // Make request with gotScraping to avoid detection
-      const response = await gotScraping.get(url, {
-        headers: headers,
-        responseType: 'text'
-      });
-      
-      // Save HTML for debugging if enabled
-      if (DEBUG_MODE) {
-        const timestamp = Date.now();
-        fs.writeFileSync(path.join(DEBUG_DIR, `flipkart-${timestamp}.html`), response.body);
-      }
-
-      // Use cheerio to parse HTML response
-      const $ = cheerio.load(response.body);
-      const products = [];
-      
-      // Flipkart product grid selector - modern pattern
-      $('._1AtVbE').each((i, element) => {
-        try {
-          const card = $(element);
-          
-          // Skip if not a product card
-          if (!card.find('._4rR01T').length && !card.find('.s1Q9rs').length) {
-            return;
-          }
-          
-          // Title is in different places depending on layout
-          let name = card.find('._4rR01T').first().text().trim();
-          if (!name) {
-            name = card.find('.s1Q9rs').first().text().trim();
-          }
-          if (!name) {
-            name = card.find('.IRpwTa').first().text().trim();
-          }
-          
-          // Product link extraction
-          let url = card.find('._1fQZEK').attr('href') || 
-                   card.find('._2rpwqI').attr('href') || 
-                   card.find('.s1Q9rs').attr('href');
-                  
-          if (!name || !url) return;
-          
-          const fullUrl = url.startsWith('http') ? url : `https://www.flipkart.com${url}`;
-          
-          // Extract ID from URL
-          let id = '';
-          const idMatch = url.match(/pid=([^&]+)/);
-          if (idMatch && idMatch[1]) {
-            id = idMatch[1];
-          } else {
-            // Alternative: try to get from URL path
-            const pathMatch = url.match(/\/p\/([^?/]+)/);
-            if (pathMatch && pathMatch[1]) {
-              id = pathMatch[1];
-            }
-          }
-          
-          // Price extraction
-          let price = 0;
-          const priceElement = card.find('._30jeq3');
-          if (priceElement.length) {
-            const priceText = priceElement.first().text().trim().replace(/[₹,]/g, '');
-            price = parseFloat(priceText) || 0;
-          }
-          
-          // Original price
-          let originalPrice = price;
-          const originalPriceElement = card.find('._3I9_wc');
-          if (originalPriceElement.length) {
-            const originalPriceText = originalPriceElement.first().text().trim().replace(/[₹,]/g, '');
-            originalPrice = parseFloat(originalPriceText) || price;
-          }
-          
-          // Discount
-          let discountPercentage = 0;
-          const discountElement = card.find('._3Ay6Sb');
-          if (discountElement.length) {
-            const discountText = discountElement.first().text().trim();
-            const discountMatch = discountText.match(/(\d+)%/);
-            if (discountMatch && discountMatch[1]) {
-              discountPercentage = parseInt(discountMatch[1], 10);
-            }
-          }
-          
-          // Image
-          const image = card.find('img').attr('src') || '';
-          
-          // Ratings
-          let rating = 0;
-          const ratingElement = card.find('._3LWZlK');
-          if (ratingElement.length) {
-            rating = parseFloat(ratingElement.first().text().trim()) || 0;
-          }
-          
-          // Rating count (often not available in search results)
-          let ratingCount = 0;
-          const ratingCountElement = card.find('._2_R_DZ');
-          if (ratingCountElement.length) {
-            const ratingCountText = ratingCountElement.first().text().trim();
-            const ratingCountMatch = ratingCountText.match(/(\d+[\d,]*)/);
-            if (ratingCountMatch && ratingCountMatch[1]) {
-              ratingCount = parseInt(ratingCountMatch[1].replace(/,/g, ''), 10) || 0;
-            }
-          }
-          
-          if (name) {
-            products.push({
-              id: id || `flipkart-${i}`,  // Use index as fallback ID
-              name,
-              url: fullUrl,
-              image,
-              price,
-              originalPrice,
-              discountPercentage,
-              rating,
-              ratingCount,
-              source: 'flipkart',
-              available: true,
-              fetch_strategy: 'html_scrape'
-            });
-          }
-        } catch (error) {
-          console.warn(`Error parsing Flipkart product card:`, error.message);
-        }
-      });
-      
-      console.log(`Successfully scraped ${products.length} products from Flipkart HTML`);
-      return products;
-      
-    } catch (error) {
-      console.error(`Error in fallback Flipkart HTML scrape:`, error.message);
-      return [];
-    }
-  }
-
-  /**
-   * Fast fetch for Reliance Digital using JSON API
-   * @param {string} query - Search query
-   * @returns {Promise<Array>} - Array of products
-   * @private
-   */
-  async _fastFetchRelianceDigital(query) {
-    console.log(`Executing optimized Reliance Digital API fetch for "${query}"`);
-    
-    try {
-      // Use the correct searchservice endpoint as indicated in your suggestion
-      const encodedQuery = encodeURIComponent(query);
-      const url = `https://www.reliancedigital.in/searchservice/v1/search?q=${encodedQuery}&page=1`;
-      
-      // Prepare headers with enhanced stealth
-      const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36';
-      const headers = {
-        'User-Agent': userAgent,
-        'Accept': 'application/json',
-        'Accept-Language': 'en-IN,en;q=0.9',
-        'Referer': `https://www.reliancedigital.in/search?q=${encodedQuery}`,
-        'Origin': 'https://www.reliancedigital.in',
-        'X-Requested-With': 'XMLHttpRequest',
-        'Sec-Fetch-Dest': 'empty',
-        'Sec-Fetch-Mode': 'cors',
-        'Sec-Fetch-Site': 'same-origin'
-      };
-
-      console.log('Reliance Digital request:', {url, headers});
-
-      // Make request with gotScraping for better anti-bot avoidance
-      const response = await gotScraping.get(url, {
-        headers: headers,
-        responseType: 'json'
-      });
-
-      // Debug response status and headers
-      console.log('Reliance Digital response status:', response.statusCode);
-      console.log('Reliance Digital response headers:', response.headers);
-      
-      // Log a sample of the response data
-      const responseData = response.body;
-      console.log('Reliance Digital response sample:', 
-        typeof responseData, 
-        JSON.stringify(responseData).substring(0, 200) + '...');
-
-      // Debug response if needed
-      if (DEBUG_MODE) {
-        this._saveDebugData('relianceDigital', 'api-response', responseData);
-      }
-
-      // Process Reliance Digital JSON response
-      let products = [];
-      
-      if (responseData && responseData.data && responseData.data.products) {
-        products = responseData.data.products.map(product => {
-          const productUrl = product.url || product.productLink || `/product/${product.productId}`;
-          
-          return {
-            id: product.productId || product.id || productUrl.split('/').pop(),
-            name: product.name || product.productName || product.displayName,
-            url: `https://www.reliancedigital.in${productUrl}`,
-            image: product.imageUrl || product.image || product.productImage,
-            price: parseFloat(product.currentPrice || product.price || 0),
-            originalPrice: parseFloat(product.mrp || product.originalPrice || product.price || 0),
-            discountPercentage: product.discountPercent || 0,
-            rating: parseFloat(product.rating || 0),
-            ratingCount: parseInt(product.ratingCount || 0, 10),
-            source: 'relianceDigital',
-            available: product.available !== false && product.inStock !== false,
-            fetch_strategy: 'searchservice_api'
-          };
-        }).filter(p => p.id && p.name);
-      }
-
-      console.log(`Successfully retrieved ${products.length} products from Reliance Digital Searchservice API`);
-      
-      // If searchservice API fails, fall back to regular API
-      if (products.length === 0) {
-        console.log('Reliance Digital Searchservice API returned no products, falling back to regular API');
-        return await this._fallbackRelianceDigitalApi(query);
-      }
-      
-      return products;
-      
-    } catch (error) {
-      console.error(`Error in Reliance Digital Searchservice API fetch:`, error.message);
-      console.log('Attempting fallback to regular Reliance Digital API...');
-      return await this._fallbackRelianceDigitalApi(query);
-    }
-  }
-  
-  /**
-   * Fallback to regular Reliance Digital API
-   * @param {string} query - Search query
-   * @returns {Promise<Array>} - Array of products
-   * @private
-   */
-  async _fallbackRelianceDigitalApi(query) {
-    console.log(`Executing Reliance Digital regular API fallback for "${query}"`);
-    
-    try {
-      const encodedQuery = encodeURIComponent(query);
-      const url = `https://www.reliancedigital.in/api/search/v1/search?q=${encodedQuery}`;
-      
-      // Prepare headers with enhanced stealth
-      const userAgent = this._getRandomUserAgent();
-      const headers = {
-        'User-Agent': userAgent,
-        'Referer': `https://www.reliancedigital.in/search?q=${encodedQuery}`,
-        'Accept': 'application/json',
-        'Accept-Language': 'en-US,en;q=0.9'
-      };
-
-      // Make request with gotScraping
-      const response = await gotScraping.get(url, {
-        headers: headers,
-        responseType: 'json'
-      });
-
-      // Process response
-      const data = response.body;
-      if (data?.products && Array.isArray(data.products)) {
-        const products = data.products;
-        console.log(`Successfully retrieved ${products.length} products from Reliance Digital regular API`);
-
-        return products.map(product => ({
-          id: product.productId || product.PDPPageURL.split('/').pop(),
-          name: product.productName || product.displayName,
-          url: `https://www.reliancedigital.in${product.PDPPageURL || product.url || ''}`,
-          image: product.imageURL || product.productImage,
-          price: parseFloat(product.price?.value || product.sellingPrice || 0),
-          originalPrice: parseFloat(product.MRP?.value || product.mrp || 0),
-          discountPercentage: product.discountPercent || Math.round(((product.mrp - product.sellingPrice) / product.mrp) * 100) || 0,
-          rating: parseFloat(product.averageRating || 0),
-          ratingCount: parseInt(product.ratingCount || 0, 10),
-          source: 'relianceDigital',
-          available: product.isAvailable !== false,
-          inStock: product.isInStock !== false,
-          fetch_strategy: 'api_v1'
-        }));
-      }
-      
-      return [];
-    } catch (error) {
-      console.error(`Error in Reliance Digital regular API fallback:`, error.message);
-      return [];
-    }
-  }
-
-  /**
-   * Fast fetch for Meesho using GraphQL API
-   * @param {string} query - Search query
-   * @returns {Promise<Array>} - Array of products
-   * @private
-   */
-  async _fastFetchMeeshoGraphQL(query) {
-    console.log(`Executing optimized Meesho GraphQL fetch for "${query}"`);
-    
-    try {
-      // The error logs show that "/api/v1/graphql" is giving a 404, try without the opName parameter
-      // Use a different URL path based on the error logs
-      const url = 'https://www.meesho.com/api/v2/search';
-      
-      // Format GraphQL query payload for Meesho with correct structure
-      const payload = {
-        query: query,
-        page: 1,
-        responseFields: [
-          "products.id",
-          "products.name", 
-          "products.slug", 
-          "products.images", 
-          "products.rating", 
-          "products.price",
-          "products.originalPrice", 
-          "products.discountPct", 
-          "products.shippingTime",
-          "totalCount"
-        ]
-      };
-
-      // Prepare headers with enhanced stealth and no GraphQL specific headers
-      const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36';
-      const headers = {
-        'User-Agent': userAgent,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Accept-Language': 'en-IN,en;q=0.9',
-        'Origin': 'https://www.meesho.com',
-        'Referer': `https://www.meesho.com/search?q=${encodeURIComponent(query)}`,
-        'Connection': 'keep-alive'
-      };
-      
-      console.log('Meesho request:', {url, headers, payload});
-      
-      // Make request with gotScraping for better anti-bot avoidance
-      const response = await gotScraping.post(url, {
-        json: payload,
-        headers: headers,
-        responseType: 'json'
-      });
-      
-      // Debug response status and headers
-      console.log('Meesho response status:', response.statusCode);
-      
-      // Log a sample of the response data
-      const responseData = response.body;
-      console.log('Meesho response sample:', 
-        typeof responseData, 
-        JSON.stringify(responseData).substring(0, 200) + '...');
-
-      // Debug response if needed
-      if (DEBUG_MODE) {
-        this._saveDebugData('meesho', 'api-response', response.body);
-      }
-
-      // Process Meesho API response
-      if (responseData && responseData.products && Array.isArray(responseData.products)) {
-        const products = responseData.products;
-        console.log(`Successfully retrieved ${products.length} products from Meesho API`);
-
-        return products.map(product => ({
-          id: product.id,
-          name: product.name,
-          url: `https://www.meesho.com/product/${product.slug || product.id}`,
-          image: product.images && product.images[0],
-          price: product.price,
-          originalPrice: product.originalPrice || product.price,
-          discountPercentage: product.discountPct || 0,
-          rating: product.rating || 0,
-          ratingCount: product.ratingCount || 0,
-          source: 'meesho',
-          available: !product.isOutOfStock,
-          deliveryDays: product.shippingTime || '5-7 days',
-          fetch_strategy: 'api_v2'
-        }));
-      }
-      
-      // Try alternate endpoints if the first one fails
-      if (!responseData?.products || !Array.isArray(responseData.products)) {
-        console.log('Meesho API v2 endpoint returned no products, trying mobile API endpoint');
-        return await this._fallbackMeeshoMobileApi(query);
-      }
-      
-      return [];
-    } catch (error) {
-      console.error(`Error fetching from Meesho API:`, error.message);
-      // Try fallback on error
-      console.log('Attempting fallback to Meesho mobile API endpoint');
-      return await this._fallbackMeeshoMobileApi(query);
-    }
-  }
-
-  /**
-   * Fallback for Meesho using the mobile API endpoint
-   * @param {string} query - Search query
-   * @returns {Promise<Array>} - Array of products
-   * @private
-   */
-  async _fallbackMeeshoMobileApi(query) {
-    console.log(`Executing Meesho mobile API fetch for "${query}"`);
-    
-    try {
-      const encodedQuery = encodeURIComponent(query);
-      const url = `https://www.meesho.com/api/v1/products/search?q=${encodedQuery}&page=1`;
-      
-      // Use mobile user agent to mimic app requests
-      const userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1';
-      const headers = {
-        'User-Agent': userAgent,
-        'Accept': 'application/json',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Origin': 'https://www.meesho.com',
-        'Referer': `https://www.meesho.com/search?q=${encodedQuery}`,
-        'X-Requested-With': 'XMLHttpRequest'
-      };
-
-      console.log('Meesho mobile API request:', {url, headers});
-      
-      // Make request with gotScraping for better anti-bot avoidance
-      const response = await gotScraping.get(url, {
-        headers: headers,
-        responseType: 'json'
-      });
-      
-      // Log response status
-      console.log('Meesho mobile API response status:', response.statusCode);
-      
-      // Log a sample of the response data
-      const responseData = response.body;
-      console.log('Meesho mobile API response sample:', 
-        typeof responseData, 
-        JSON.stringify(responseData).substring(0, 200) + '...');
-      
-      // Process response
-      if (responseData && responseData.data && Array.isArray(responseData.data)) {
-        const products = responseData.data;
-        console.log(`Successfully retrieved ${products.length} products from Meesho mobile API`);
-
-        return products.map(product => ({
-          id: product.id,
-          name: product.name,
-          url: `https://www.meesho.com/product/${product.slug || product.id}`,
-          image: product.image || (product.images && product.images[0]),
-          price: product.price || product.discountedPrice,
-          originalPrice: product.originalPrice || product.mrp || product.price,
-          discountPercentage: product.discountPct || product.discount || 0,
-          rating: product.rating || 0,
-          ratingCount: product.ratingCount || 0,
-          source: 'meesho',
-          available: !product.isOutOfStock,
-          deliveryDays: product.deliveryDays || '5-7 days',
-          fetch_strategy: 'mobile_api'
-        }));
-      }
-      
-      return [];
-    } catch (error) {
-      console.error(`Error in Meesho mobile API fallback:`, error.message);
-      return [];
-    }
-  }
-
-  /**
-   * Fast fetch for Croma using catalog API
-   * @param {string} query - Search query
-   * @returns {Promise<Array>} - Array of products
-   * @private
-   */
-  async _fastFetchCroma(query) {
-    console.log(`Executing optimized Croma catalog API fetch for "${query}"`);
-    
-    try {
-      // Use catalog API instead of commerce API (which is returning 404)
-      const encodedQuery = encodeURIComponent(query);
-      const url = `https://api.croma.com/catalog/v1/search?currentPage=0&query=${encodedQuery}&fields=FULL`;
-      
-      // Prepare headers with required fields for Croma API
-      const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36';
-      const headers = {
-        'User-Agent': userAgent,
-        'Accept': 'application/json',
-        'Referer': `https://www.croma.com/search?q=${encodedQuery}`,
-        'Origin': 'https://www.croma.com',
-        'Accept-Language': 'en-IN,en;q=0.9'
-      };
-
-      console.log('Croma catalog request:', {url, headers});
-
-      // Make request with gotScraping
-      const response = await gotScraping.get(url, {
-        headers: headers,
-        responseType: 'json'
-      });
-      
-      // Debug response status and headers
-      console.log('Croma catalog API response status:', response.statusCode);
-      
-      // Log a sample of the response data
-      const responseData = response.body;
-      console.log('Croma catalog API response sample:', 
-        typeof responseData, 
-        JSON.stringify(responseData).substring(0, 200) + '...');
-      
-      // Save full response for debugging if enabled
-      if (DEBUG_MODE) {
-        this._saveDebugData('croma', 'catalog-api-response', responseData);
-      }
-
-      // Process Croma catalog API response
-      let products = [];
-      
-      if (responseData && responseData.products && Array.isArray(responseData.products)) {
-        products = responseData.products.map(product => {
-          const url = product.url || `/p/${product.code}`;
-          
-          // Try to get price information from various locations in the response
-          const currentPrice = 
-            (product.price && product.price.value) ? 
-            parseFloat(product.price.value) : 
-            (product.sellingPrice ? parseFloat(product.sellingPrice) : 0);
-          
-          const originalPrice = 
-            (product.mrp) ? 
-            parseFloat(product.mrp) : 
-            currentPrice;
-          
-          // Calculate discount
-          let discountPercentage = 0;
-          if (originalPrice > currentPrice && currentPrice > 0) {
-            discountPercentage = Math.round(((originalPrice - currentPrice) / originalPrice) * 100);
-          } else if (product.discountPercent) {
-            discountPercentage = parseInt(product.discountPercent, 10);
-          }
-          
-          return {
-            id: product.code,
-            name: product.name,
-            url: url.startsWith('http') ? url : `https://www.croma.com${url}`,
-            image: product.plpImage || (product.images && product.images.length > 0 ? product.images[0].url : ''),
-            price: currentPrice,
-            originalPrice: originalPrice,
-            discountPercentage: discountPercentage,
-            rating: product.averageRating || 0,
-            ratingCount: product.numberOfReviews || 0,
-            source: 'croma',
-            available: product.stock && product.stock.stockLevelStatus !== 'outOfStock',
-            inStock: product.stock && product.stock.stockLevelStatus === 'inStock',
-            fetch_strategy: 'catalog_api'
-          };
-        }).filter(p => p.id && p.name);
-      }
-
-      console.log(`Successfully retrieved ${products.length} products from Croma Catalog API`);
-      
-      // If catalog API fails, try mobile API
-      if (products.length === 0) {
-        console.log('Croma Catalog API returned no products, trying mobile API');
-        return await this._fallbackCromaMobileApi(query);
-      }
-      
-      return products;
-    } catch (error) {
-      console.error(`Error in Croma Catalog API fetch:`, error.message);
-      console.log('Attempting fallback to Croma Mobile API...');
-      return await this._fallbackCromaMobileApi(query);
-    }
-  }
-
-  /**
-   * Fallback to Croma Mobile API
-   * @param {string} query - Search query
-   * @returns {Promise<Array>} - Array of products
-   * @private
-   */
-  async _fallbackCromaMobileApi(query) {
-    console.log(`Executing Croma Mobile API fallback for "${query}"`);
-    
-    try {
-      const encodedQuery = encodeURIComponent(query);
-      const url = `https://api.croma.com/mobile/v1/search?query=${encodedQuery}&page=0&size=20`;
-      
-      // Use mobile user agent
-      const userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1';
-      const headers = {
-        'User-Agent': userAgent,
-        'Accept': 'application/json',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Origin': 'https://m.croma.com',
-        'Referer': `https://m.croma.com/search?q=${encodedQuery}`,
-        'x-device-type': 'mobile'
-      };
-
-      console.log('Croma mobile API request:', {url, headers});
-      
-      // Make request with gotScraping
-      const response = await gotScraping.get(url, {
-        headers: headers,
-        responseType: 'json'
-      });
-      
-      // Log response status
-      console.log('Croma mobile API response status:', response.statusCode);
-      
-      // Log a sample of the response data
-      const responseData = response.body;
-      console.log('Croma mobile API response sample:', 
-        typeof responseData, 
-        JSON.stringify(responseData).substring(0, 200) + '...');
-      
-      // Process response
-      let products = [];
-      if (responseData && responseData.products && Array.isArray(responseData.products)) {
-        products = responseData.products.map(product => {
-          return {
-            id: product.code,
-            name: product.name,
-            url: `https://www.croma.com${product.url || `/p/${product.code}`}`,
-            image: product.plpImage || (product.images && product.images.length > 0 ? product.images[0] : ''),
-            price: parseFloat(product.price?.value || product.sellingPrice || 0),
-            originalPrice: parseFloat(product.mrp || 0),
-            discountPercentage: parseInt(product.discountPercent || 0, 10),
-            rating: product.averageRating || 0,
-            ratingCount: product.numberOfReviews || 0,
-            source: 'croma',
-            available: product.stock?.stockLevelStatus !== 'outOfStock',
-            inStock: product.stock?.stockLevelStatus === 'inStock',
-            fetch_strategy: 'mobile_api'
-          };
-        }).filter(p => p.id && p.name);
-      }
-      
-      console.log(`Successfully retrieved ${products.length} products from Croma Mobile API`);
-      
-      // If mobile API fails, fall back to regular search API as last resort
-      if (products.length === 0) {
-        console.log('Croma Mobile API returned no products, falling back to search API');
-        return await this._fallbackCromaSearchApi(query);
-      }
-      
-      return products;
-    } catch (error) {
-      console.error(`Error in Croma Mobile API fallback:`, error.message);
-      console.log('Attempting fallback to search API as last resort');
-      return await this._fallbackCromaSearchApi(query);
-    }
-  }
-
-  /**
-   * Fallback to Croma's search API
-   * @param {string} query - Search query
-   * @returns {Promise<Array>} - Array of products
-   * @private
-   */
-  async _fallbackCromaSearchApi(query) {
-    console.log(`Executing Croma Search API fallback for "${query}"`);
-    
-    try {
-      const encodedQuery = encodeURIComponent(query);
-      const url = `https://api.croma.com/searchservices/v1/search?query=${encodedQuery}&currentPage=0&fields=FULL&pageSize=20`;
-      
-      // Prepare headers with random user agent
-      const userAgent = this._getRandomUserAgent();
-      const headers = {
-        'User-Agent': userAgent,
-        'Referer': `https://www.croma.com/search?q=${encodedQuery}`,
-        'Accept': 'application/json',
-        'Content-Type': 'application/json'
-      };
-
-      console.log('Croma search API request:', {url, headers});
-      
-      // Make request with gotScraping
-      const response = await gotScraping.get(url, {
-        headers: headers,
-        responseType: 'json'
-      });
-      
-      // Log response status
-      console.log('Croma search API response status:', response.statusCode);
-      
-      // Log a sample of the response data
-      const responseData = response.body;
-      console.log('Croma search API response sample:', 
-        typeof responseData, 
-        JSON.stringify(responseData).substring(0, 200) + '...');
-      
-      // Process response
-      if (responseData && responseData.products && Array.isArray(responseData.products)) {
-        const products = responseData.products;
-        console.log(`Successfully retrieved ${products.length} products from Croma Search API`);
-
-        return products.map(product => ({
-          id: product.code,
-          name: product.name,
-          url: `https://www.croma.com${product.url || `/p/${product.code}`}`,
-          image: product.images && product.images[0]?.url,
-          price: parseFloat(product.price?.value || 0),
-          originalPrice: parseFloat(product.mrp || 0),
-          discountPercentage: parseInt(product.discountPercent || 0, 10),
-          rating: product.averageRating || 0,
-          ratingCount: product.numberOfReviews || 0,
-          source: 'croma',
-          available: product.stock?.stockLevelStatus !== 'outOfStock',
-          inStock: product.stock?.stockLevelStatus === 'inStock',
-          fetch_strategy: 'search_api'
-        }));
-      }
-      
-      // If search API fails, fall back to HTML scraping
-      console.log('Croma search API returned no products, falling back to HTML scraping');
-      return await this._fallbackCromaHtmlScrape(query);
-    } catch (error) {
-      console.error(`Error in Croma search API fallback:`, error.message);
-      console.log('Attempting fallback to HTML scraping as last resort');
-      return await this._fallbackCromaHtmlScrape(query);
-    }
-  }
-
-  /**
-   * HTML scraping fallback for Croma
-   * @param {string} query - Search query
-   * @returns {Promise<Array>} - Array of products
-   * @private
-   */
-  async _fallbackCromaHtmlScrape(query) {
-    console.log(`Executing Croma HTML scrape fallback for "${query}"`);
-    
-    try {
-      const encodedQuery = encodeURIComponent(query);
-      const url = `https://www.croma.com/search?q=${encodedQuery}`;
-      
-      // Prepare headers with enhanced stealth
-      const userAgent = this._getRandomUserAgent();
-      const headers = {
-        'User-Agent': userAgent,
-        'Referer': 'https://www.croma.com/',
-        'Accept': 'text/html,application/xhtml+xml,application/xml',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive',
-        'Cache-Control': 'no-cache',
-        'Upgrade-Insecure-Requests': '1'
-      };
-
-      // Make request with gotScraping
-      const response = await gotScraping.get(url, {
-        headers: headers,
-        responseType: 'text'
-      });
-      
-      // Save HTML for debugging if needed
-      if (DEBUG_MODE) {
-        const timestamp = Date.now();
-        fs.writeFileSync(path.join(DEBUG_DIR, `croma-${timestamp}.html`), response.body);
-      }
-
-      // Parse HTML with cheerio
-      const $ = cheerio.load(response.body);
-      const products = [];
-      
-      // Croma product cards
-      $('.product-card').each((i, element) => {
-        try {
-          const card = $(element);
-          
-          // Get product name
-          const name = card.find('.product-title').text().trim();
-          if (!name) return;
-          
-          // Get product URL
-          const urlElement = card.find('.product-title a');
-          const url = urlElement.attr('href');
-          if (!url) return;
-          
-          const fullUrl = url.startsWith('http') ? url : `https://www.croma.com${url}`;
-          
-          // Get product ID
-          let id = '';
-          const idMatch = url.match(/\/p\/([^?/]+)/);
-          if (idMatch && idMatch[1]) {
-            id = idMatch[1];
-          }
-          
-          // Get price
-          let price = 0;
-          const priceElement = card.find('.new-price');
-          if (priceElement.length) {
-            const priceText = priceElement.text().trim().replace(/[₹,]/g, '');
-            price = parseFloat(priceText) || 0;
-          }
-          
-          // Get original price
-          let originalPrice = price;
-          const originalPriceElement = card.find('.old-price');
-          if (originalPriceElement.length) {
-            const originalPriceText = originalPriceElement.text().trim().replace(/[₹,]/g, '');
-            originalPrice = parseFloat(originalPriceText) || price;
-          }
-          
-          // Calculate discount
-          let discountPercentage = 0;
-          if (originalPrice > price && price > 0) {
-            discountPercentage = Math.round(((originalPrice - price) / originalPrice) * 100);
-          }
-          
-          // Get discount from UI if available
-          const discountElement = card.find('.discount');
-          if (discountElement.length) {
-            const discountText = discountElement.text().trim();
-            const discountMatch = discountText.match(/(\d+)%/);
-            if (discountMatch && discountMatch[1]) {
-              discountPercentage = parseInt(discountMatch[1], 10);
-            }
-          }
-          
-          // Get image
-          const image = card.find('img').attr('src') || '';
-          
-          // Get rating
-          let rating = 0;
-          const ratingElement = card.find('.rating');
-          if (ratingElement.length) {
-            const ratingText = ratingElement.text().trim();
-            const ratingMatch = ratingText.match(/(\d+(\.\d+)?)/);
-            if (ratingMatch && ratingMatch[1]) {
-              rating = parseFloat(ratingMatch[1]);
-            }
-          }
-          
-          // Get rating count
-          let ratingCount = 0;
-          const ratingCountElement = card.find('.reviews-count');
-          if (ratingCountElement.length) {
-            const ratingCountText = ratingCountElement.text().trim();
-            const ratingCountMatch = ratingCountText.match(/(\d+)/);
-            if (ratingCountMatch && ratingCountMatch[1]) {
-              ratingCount = parseInt(ratingCountMatch[1], 10);
-            }
-          }
-          
-          if (name && (id || url)) {
-            products.push({
-              id: id || `croma-${i}`,
-              name,
-              url: fullUrl,
-              image,
-              price,
-              originalPrice,
-              discountPercentage,
-              rating,
-              ratingCount,
-              source: 'croma',
-              available: true,
-              fetch_strategy: 'html_scrape'
-            });
-          }
-        } catch (error) {
-          console.warn(`Error parsing Croma product card:`, error.message);
-        }
-      });
-      
-      console.log(`Successfully scraped ${products.length} products from Croma HTML`);
-      return products;
-      
-    } catch (error) {
-      console.error(`Error in Croma HTML scrape fallback:`, error.message);
-      return [];
-    }
-  }
-
-  /**
-   * Fast fetch for Amazon using gotScraping
+   * Fast fetch for Amazon using gotScraping approach
    * @param {string} query - Search query
    * @returns {Promise<Array>} - Array of products
    * @private
    */
   async _fastFetchAmazon(query) {
-    console.log(`Executing optimized Amazon fetch for "${query}"`);
+    console.log(`Executing optimized Amazon search fetch for "${query}"`);
     
     try {
-      const encodedQuery = encodeURIComponent(query);
-      const url = `https://www.amazon.in/s?k=${encodedQuery}`;
+      // Use a mobile user agent for better experience with fewer anti-bot measures
+      const userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1';
       
-      // Prepare headers with enhanced stealth
-      const userAgent = this._getRandomUserAgent();
+      const url = `https://www.amazon.in/s?k=${encodeURIComponent(query)}&ref=nb_sb_noss`;
       const headers = {
         'User-Agent': userAgent,
-        'Referer': 'https://www.amazon.in/',
-        'Accept': 'text/html,application/xhtml+xml',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9',
         'Accept-Encoding': 'gzip, deflate, br',
         'Connection': 'keep-alive',
-        'Cache-Control': 'max-age=0',
         'Upgrade-Insecure-Requests': '1',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'same-origin',
-        'Sec-Fetch-User': '?1',
-        'DNT': '1'
+        'Referer': 'https://www.amazon.in/',
+        'Cache-Control': 'max-age=0'
       };
-
-      // Make request with gotScraping for better anti-bot avoidance
-      const response = await gotScraping.get(url, {
-        headers: headers,
-        responseType: 'text'
+      
+      console.log('Amazon request:', {
+        url,
+        headers: { 'User-Agent': userAgent }
       });
       
-      // Save HTML for debugging if enabled
-      if (DEBUG_MODE) {
-        const timestamp = Date.now();
-        fs.writeFileSync(path.join(DEBUG_DIR, `amazon-${timestamp}.html`), response.body);
-      }
-
-      // Use cheerio to parse HTML response
-      const $ = cheerio.load(response.body);
-      const products = [];
+      // Make the request
+      const response = await gotScraping.get(url, {
+        headers,
+        responseType: 'text',
+        timeout: {
+          request: 15000
+        }
+      }).catch(error => {
+        console.log(`Amazon request error: ${error.message}`);
+        throw error;
+      });
       
-      // Amazon product grid selector
-      const productCards = $('div[data-asin]:not([data-asin=""])');
-      
-      productCards.each((i, element) => {
-        try {
-          const card = $(element);
-          const asin = card.attr('data-asin');
-          
-          if (!asin || asin === '') return;
-          
-          // Extract product data
-          const titleElement = card.find('h2 a.a-link-normal').first();
-          const name = titleElement.text().trim();
-          const url = titleElement.attr('href');
-          
-          if (!name || !url) return;
-          
-          const fullUrl = url.startsWith('http') ? url : `https://www.amazon.in${url}`;
-          
-          // Get price information with fallback selectors
-          const wholePriceText = card.find('.a-price-whole').first().text().trim();
-          const fractionPriceText = card.find('.a-price-fraction').first().text().trim();
-          
-          let price = 0;
-          if (wholePriceText) {
-            price = parseFloat(`${wholePriceText.replace(/[,.]/g, '')}${fractionPriceText ? `.${fractionPriceText}` : ''}`);
-          }
-          
-          // Get original price with fallback selectors
-          const originalPriceText = card.find('.a-text-price .a-offscreen').first().text().replace(/[₹,]/g, '');
-          const originalPrice = parseFloat(originalPriceText) || price;
-          
-          // Calculate discount or get it from the UI
-          let discountPercentage = 0;
-          if (originalPrice > price && price > 0) {
-            discountPercentage = Math.round(((originalPrice - price) / originalPrice) * 100);
-          }
-          
-          const discountElement = card.find('.a-row.a-size-base .a-color-secondary').text().match(/(\d+)%/);
-          if (discountElement && discountElement[1]) {
-            discountPercentage = parseInt(discountElement[1], 10);
-          }
-          
-          // Get image URL
-          const image = card.find('img.s-image').attr('src');
-          
-          // Get rating information
-          const ratingText = card.find('.a-icon-star-small .a-icon-alt').first().text();
-          const ratingMatch = ratingText.match(/(\d+(\.\d+)?)/);
-          const rating = ratingMatch ? parseFloat(ratingMatch[1]) : 0;
-          
-          // Get rating count
-          const ratingCountText = card.find('.a-size-small .a-link-normal').text().replace(/[^0-9]/g, '');
-          const ratingCount = parseInt(ratingCountText, 10) || 0;
-          
-          if (asin && name) {
+      if (response.body) {
+        // Save HTML for debugging if enabled
+        if (DEBUG_MODE) {
+          const timestamp = Date.now();
+          fs.writeFileSync(path.join(DEBUG_DIR, `amazon-mobile-${timestamp}.html`), response.body);
+        }
+        
+        // Use cheerio to parse HTML
+        const $ = cheerio.load(response.body);
+        const products = [];
+        
+        // Check if we hit a CAPTCHA
+        if (response.body.includes('Type the characters you see in this image') || 
+            response.body.includes('Enter the characters you see below') ||
+            response.body.includes('Robot Check')) {
+          console.log('Amazon CAPTCHA detected, trying fallback with clean session');
+          return await this._amazonFallbackScrape(query);
+        }
+        
+        // Look for product grids/cards in mobile view
+        $('.s-result-item[data-asin]:not([data-asin=""])').each((i, element) => {
+          try {
+            const card = $(element);
+            const asin = card.attr('data-asin');
+            
+            if (!asin || asin === '') return;
+            
+            // Extract name
+            const nameElement = card.find('h2 span.a-text-normal, .a-size-base-plus');
+            const name = nameElement.text().trim();
+            
+            if (!name) return;
+            
+            // Extract URL
+            const linkElement = card.find('a.a-link-normal[href*="/dp/"]').first();
+            const url = linkElement.attr('href');
+            const fullUrl = url ? (url.startsWith('http') ? url : `https://www.amazon.in${url}`) : '';
+            
+            if (!fullUrl) return;
+            
+            // Extract price - mobile site typically has .a-price-whole
+            let price = 0;
+            const priceElement = card.find('.a-price .a-offscreen, .a-price-whole');
+            if (priceElement.length) {
+              const priceText = priceElement.first().text().trim();
+              price = parseFloat(priceText.replace(/[^0-9.]/g, '')) || 0;
+            }
+            
+            // Extract original price if available
+            let originalPrice = price;
+            const originalPriceElement = card.find('.a-text-price span');
+            if (originalPriceElement.length) {
+              const originalPriceText = originalPriceElement.first().text().trim();
+              originalPrice = parseFloat(originalPriceText.replace(/[^0-9.]/g, '')) || price;
+            }
+            
+            // Calculate discount
+            let discountPercentage = 0;
+            if (originalPrice > price && price > 0) {
+              discountPercentage = Math.round(((originalPrice - price) / originalPrice) * 100);
+            }
+            
+            // Extract image
+            const imageElement = card.find('img.s-image');
+            const image = imageElement.attr('src') || '';
+            
+            // Extract rating
+            let rating = 0;
+            const ratingElement = card.find('i.a-icon-star, .a-star-small');
+            if (ratingElement.length) {
+              const ratingText = ratingElement.first().text().trim();
+              const ratingMatch = ratingText.match(/(\d+(\.\d+)?)/);
+              if (ratingMatch && ratingMatch[1]) {
+                rating = parseFloat(ratingMatch[1]);
+              }
+            }
+            
+            // Extract rating count
+            let ratingCount = 0;
+            const ratingCountElement = card.find('.a-size-small:contains("ratings"), .a-size-mini:contains("ratings")');
+            if (ratingCountElement.length) {
+              const ratingCountText = ratingCountElement.first().text().trim();
+              const ratingCountMatch = ratingCountText.match(/\((\d+[,\d]*)\)/);
+              if (ratingCountMatch && ratingCountMatch[1]) {
+                ratingCount = parseInt(ratingCountMatch[1].replace(/,/g, ''), 10);
+              }
+            }
+            
             products.push({
               id: asin,
               name,
               url: fullUrl,
               image,
               price,
-              originalPrice: originalPrice || price,
+              originalPrice,
               discountPercentage,
               rating,
               ratingCount,
               source: 'amazon',
               available: true,
-              fetch_strategy: 'html_scrape_fast'
+              fetch_strategy: 'mobile_html_scrape'
             });
+          } catch (error) {
+            console.warn(`Error extracting Amazon product: ${error.message}`);
           }
-        } catch (error) {
-          console.warn(`Error parsing Amazon product card:`, error.message);
+        });
+        
+        console.log(`Found ${products.length} products from Amazon mobile site`);
+        
+        if (products.length > 0) {
+          return products;
+        } else {
+          // No products found, try fallback method
+          return await this._amazonFallbackScrape(query);
+        }
+      }
+      
+      return [];
+    } catch (error) {
+      console.error(`Fast Amazon fetch error: ${error.message}`);
+      // Try fallback approach
+      return await this._amazonFallbackScrape(query);
+    }
+  }
+  
+  /**
+   * Amazon fallback scraping method with alternate user agent
+   * @param {string} query - Search query
+   * @returns {Promise<Array>} - Array of products
+   * @private
+   */
+  async _amazonFallbackScrape(query) {
+    console.log(`Executing Amazon fallback scraping for "${query}"`);
+    
+    try {
+      // Try with desktop user agent instead
+      const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36';
+      
+      const url = `https://www.amazon.in/s?k=${encodeURIComponent(query)}`;
+      const headers = {
+        'User-Agent': userAgent,
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'en-IN,en;q=0.9,hi;q=0.8,en-GB;q=0.7,en-US;q=0.6',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Sec-Ch-Ua': '"Google Chrome";v="123"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"Windows"',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Upgrade-Insecure-Requests': '1'
+      };
+      
+      const response = await gotScraping.get(url, {
+        headers,
+        responseType: 'text',
+        timeout: {
+          request: 15000
         }
       });
       
-      console.log(`Successfully scraped ${products.length} products from Amazon HTML`);
-      return products;
+      // Use cheerio to parse HTML
+      const $ = cheerio.load(response.body);
+      const products = [];
       
+      // Desktop site selectors are different
+      $('.s-result-item[data-asin]:not([data-asin=""]), [data-component-type="s-search-result"]').each((i, element) => {
+        try {
+          const card = $(element);
+          const asin = card.attr('data-asin');
+          
+          if (!asin || asin === '') return;
+          
+          // Extract name
+          const titleElement = card.find('h2 a span, .a-size-medium.a-text-normal, .a-size-base-plus.a-color-base');
+          const name = titleElement.text().trim();
+          
+          if (!name) return;
+          
+          // Extract URL
+          const linkElement = card.find('h2 a, a.a-link-normal.a-text-normal');
+          const url = linkElement.attr('href');
+          
+          if (!url) return;
+          
+          const fullUrl = url.startsWith('http') ? url : `https://www.amazon.in${url}`;
+          
+          // Extract price
+          let price = 0;
+          const priceElement = card.find('.a-price .a-offscreen, .a-price-whole').first();
+          if (priceElement.length) {
+            const priceText = priceElement.text().trim();
+            price = parseFloat(priceText.replace(/[^0-9.]/g, '')) || 0;
+          }
+          
+          // Extract original price
+          let originalPrice = price;
+          const originalPriceElement = card.find('.a-text-price .a-offscreen, .a-text-price').first();
+          if (originalPriceElement.length) {
+            const originalPriceText = originalPriceElement.text().trim();
+            originalPrice = parseFloat(originalPriceText.replace(/[^0-9.]/g, '')) || price;
+          }
+          
+          // Calculate discount
+          let discountPercentage = 0;
+          if (originalPrice > price && price > 0) {
+            discountPercentage = Math.round(((originalPrice - price) / originalPrice) * 100);
+          }
+          
+          // Extract image
+          const imageElement = card.find('img.s-image');
+          const image = imageElement.attr('src') || '';
+          
+          // Extract rating
+          let rating = 0;
+          const ratingElement = card.find('.a-icon-star-small');
+          if (ratingElement.length) {
+            const ratingText = ratingElement.attr('aria-label') || ratingElement.text().trim();
+            const ratingMatch = ratingText.match(/(\d+(\.\d+)?)/);
+            if (ratingMatch && ratingMatch[1]) {
+              rating = parseFloat(ratingMatch[1]);
+            }
+          }
+          
+          products.push({
+            id: asin,
+            name,
+            url: fullUrl,
+            image,
+            price,
+            originalPrice,
+            discountPercentage,
+            rating,
+            source: 'amazon',
+            available: true,
+            fetch_strategy: 'desktop_fallback'
+          });
+        } catch (error) {
+          console.warn(`Error extracting Amazon fallback product: ${error.message}`);
+        }
+      });
+      
+      console.log(`Found ${products.length} products from Amazon fallback scraping`);
+      return products;
     } catch (error) {
-      console.error(`Error in fast Amazon fetch:`, error.message);
+      console.error(`Amazon fallback scraping error: ${error.message}`);
       return [];
     }
   }

@@ -82,6 +82,269 @@ class ScraperService {
   }
 
   /**
+   * Search for a product using an image
+   * @param {string} imageData - Base64 encoded image data
+   * @param {string} extractedKeywords - Optional keywords extracted from the image
+   * @returns {Promise<Object>} - Search results
+   */
+  async searchProductByImage(imageData, extractedKeywords) {
+    console.log('Searching for product by image');
+    
+    // If we have no image data but have keywords, fall back to normal text search
+    if (!imageData && extractedKeywords) {
+      console.log(`No image data, using extracted keywords: ${extractedKeywords}`);
+      return await this.searchProducts(extractedKeywords);
+    }
+    
+    try {
+      // Import groqService for image analysis
+      const groqService = require('../services/groqService');
+      
+      // Import our local image analyzer for fallback
+      const localImageAnalyzer = require('../services/localImageAnalyzer');
+      
+      // Process the image and get product identification
+      const tempDir = path.join(__dirname, '../uploads/temp');
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+      
+      // Create a temporary file for the image
+      const tempImagePath = path.join(tempDir, `image-${Date.now()}.jpg`);
+      fs.writeFileSync(tempImagePath, Buffer.from(imageData, 'base64'));
+      
+      console.log('Identifying product from image using Groq Vision API...');
+      
+      // Track whether we need to try our fallback
+      let useLocalAnalyzer = false;
+      let groqFailureReason = null;
+      
+      // Try Groq first - this is our primary approach
+      let identificationResult;
+      try {
+        // Use Groq Vision API to identify the product
+        identificationResult = await groqService.identifyProductFromImage(tempImagePath);
+        
+        // If Groq failed, mark for fallback
+        if (!identificationResult.success) {
+          useLocalAnalyzer = true;
+          groqFailureReason = identificationResult.error || "Unknown error";
+          console.warn('Failed to identify product from image:', groqFailureReason);
+        }
+      } catch (identifyError) {
+        console.error('Error identifying product from image:', identifyError);
+        useLocalAnalyzer = true;
+        groqFailureReason = identifyError.message;
+        
+        // Check if this is a service unavailable error
+        const isServiceUnavailable = 
+          identifyError.message?.includes('503') || 
+          identifyError.message?.includes('500') ||
+          identifyError.message?.includes('Service Unavailable') ||
+          identifyError.message?.includes('Internal Server Error') ||
+          identifyError.message?.includes('ERR_BAD_RESPONSE');
+          
+        if (isServiceUnavailable) {
+          console.log('Groq Vision API service is unavailable. Using local analyzer fallback.');
+        }
+      }
+      
+      // If Groq succeeded, use its results
+      if (!useLocalAnalyzer && identificationResult && identificationResult.success) {
+        console.log('Product identification successful with Groq Vision API:', identificationResult.productData);
+        
+        // Clean up temporary file
+        if (fs.existsSync(tempImagePath)) {
+          fs.unlinkSync(tempImagePath);
+        }
+        
+        // Get search string from the identification result
+        const searchQuery = identificationResult.productData.searchString || 
+                         identificationResult.productData.product;
+        
+        console.log(`Using search query from Groq Vision API: "${searchQuery}"`);
+        
+        // Use the identified product name/keywords to search for products
+        const searchResults = await this.searchProducts(searchQuery);
+        
+        // Attach the product identification data to the search results
+        return {
+          ...searchResults,
+          identificationResult: identificationResult,
+          analysisMethod: "groq_vision"
+        };
+      }
+      
+      // If Groq failed, try our local image analyzer
+      console.log('Using local image analyzer as fallback...');
+      try {
+        const localAnalysis = await localImageAnalyzer.analyzeImage(tempImagePath);
+        
+        // Clean up temporary file
+        if (fs.existsSync(tempImagePath)) {
+          fs.unlinkSync(tempImagePath);
+        }
+        
+        if (localAnalysis.success) {
+          // Get the most relevant search query from local analysis
+          const searchQuery = localAnalysis.suggestedQueries && localAnalysis.suggestedQueries.length > 0
+            ? localAnalysis.suggestedQueries.join(' ')
+            : (extractedKeywords || "popular products");
+            
+          console.log(`Using local analysis search query: "${searchQuery}"`);
+          
+          // Use the search query to search for products
+          const searchResults = await this.searchProducts(searchQuery);
+          
+          return {
+            ...searchResults,
+            localAnalysis: {
+              category: localAnalysis.category,
+              confidence: localAnalysis.confidence,
+              searchTerms: localAnalysis.searchTerms
+            },
+            groqFailure: groqFailureReason ? { reason: groqFailureReason } : null,
+            analysisMethod: "local_analyzer"
+          };
+        } else {
+          // If local analysis also failed and we have extracted keywords, use those
+          if (extractedKeywords) {
+            console.log(`Both Groq and local analysis failed. Using extracted keywords: ${extractedKeywords}`);
+            const searchResults = await this.searchProducts(extractedKeywords);
+            return {
+              ...searchResults,
+              analysisMethod: "extracted_keywords",
+              groqFailure: groqFailureReason ? { reason: groqFailureReason } : null
+            };
+          }
+          
+          // Final fallback - use general product search terms
+          console.log('All image analysis methods failed. Using generic product search terms.');
+          const searchResults = await this.searchProducts("trending popular products");
+          return {
+            ...searchResults,
+            analysisMethod: "fallback",
+            groqFailure: groqFailureReason ? { reason: groqFailureReason } : null
+          };
+        }
+      } catch (localAnalysisError) {
+        console.error('Local image analyzer failed:', localAnalysisError);
+        
+        // Clean up temporary file in case of error
+        if (fs.existsSync(tempImagePath)) {
+          fs.unlinkSync(tempImagePath);
+        }
+        
+        // If we have extracted keywords as final fallback, use them
+        if (extractedKeywords) {
+          console.log(`Both Groq and local analysis failed. Using extracted keywords: ${extractedKeywords}`);
+          return await this.searchProducts(extractedKeywords);
+        }
+        
+        // Last resort fallback
+        return await this.searchProducts("trending popular products");
+      }
+    } catch (error) {
+      console.error('Error in image-based product search:', error);
+      
+      // Emergency fallback - return something rather than crashing
+      return {
+        success: true,
+        products: [],
+        error: error.message,
+        message: "Unable to process image. Please try using text search instead.",
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+  
+  /**
+   * Guess image category using basic image analysis
+   * Simple fallback when cloud services are unavailable
+   * @param {string} imagePath - Path to image file
+   * @returns {Promise<string|null>} - Guessed category or null
+   */
+  async guessImageCategory(imagePath) {
+    try {
+      // If file doesn't exist, return null
+      if (!fs.existsSync(imagePath)) {
+        return null;
+      }
+      
+      // Simple heuristic based on image size and aspect ratio
+      const stats = fs.statSync(imagePath);
+      const fileSize = stats.size;
+      
+      // We'll return a random category as a simple fallback
+      // In a real implementation, this could use local image analysis libraries
+      const categories = ['electronics', 'clothing', 'furniture', 'beauty', 'food'];
+      return categories[Math.floor(Math.random() * categories.length)];
+    } catch (error) {
+      console.error('Error guessing image category:', error);
+      return null;
+    }
+  }
+  
+  /**
+   * Search for products by query (wrapper around searchProduct)
+   * @param {string} query - Search query
+   * @returns {Promise<Object>} - Search results in a standardized format
+   */
+  async searchProducts(query) {
+    try {
+      // First try the directApiService for faster results
+      try {
+        console.log(`Trying directApiService for query: "${query}"`);
+        const directResults = await this.directApiService.searchProducts(query);
+        if (directResults && directResults.products && directResults.products.length > 0) {
+          console.log(`Got ${directResults.products.length} products from directApiService`);
+          return directResults;
+        }
+      } catch (directErr) {
+        console.warn('directApiService search failed:', directErr.message);
+      }
+      
+      // Fall back to the multi-retailer search if directApiService fails
+      const retailerResults = await this.searchProduct(query);
+      
+      // Flatten and normalize results from all retailers
+      const products = [];
+      
+      for (const [retailer, items] of Object.entries(retailerResults)) {
+        if (Array.isArray(items)) {
+          for (const item of items) {
+            products.push({
+              ...item,
+              retailer: retailer,
+              source: retailer,
+              vendorLogo: `https://logo.clearbit.com/${retailer.replace(/\s+/g, '')}.com`
+            });
+          }
+        }
+      }
+      
+      console.log(`Combined ${products.length} products from all retailers`);
+      
+      return {
+        success: true,
+        products,
+        query,
+        timestamp: new Date().toISOString()
+      };
+      
+    } catch (error) {
+      console.error('Error searching products:', error);
+      return {
+        success: false,
+        products: [],
+        error: error.message,
+        query,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+
+  /**
    * Search a specific retailer with fallback strategies
    * @param {string} retailer - Retailer key
    * @param {string} query - Search query

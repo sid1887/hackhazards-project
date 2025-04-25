@@ -1,6 +1,6 @@
 {
   "systemPrompts": {
-    "productIdentification": "You are a visual recognition assistant specialized in product identification. Analyze product images in detail and extract structured information accurately. Return only valid JSON.",
+    "productIdentification": "Analyze this product image in detail and identify what it shows. Extract as much product information as possible in structured JSON format with these fields:\n{\n  \"product_name\": \"Exact product name\",\n  \"brand\": \"Brand name or null if not visible\",\n  \"category\": \"One of: Electronics, Apparel, Home Goods, Beauty, Food, Toys, Other\",\n  \"key_features\": [\"3 key visible features\"],\n  \"search_keywords\": [\"5-8 specific search terms\"],\n  \"description\": \"Brief description (30 words max)\"\n}\n\nContext: This is for e-commerce price comparison. Response MUST be valid JSON.",
     
     "webScraping": "You are an expert at extracting structured product data from HTML content. Focus on product details, pricing, and specifications. Return valid JSON only.",
     

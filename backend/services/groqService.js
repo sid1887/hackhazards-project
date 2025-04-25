@@ -23,11 +23,11 @@ class GroqService {
   constructor() {
     this.apiKey = process.env.GROQ_API_KEY;
     this.groqApiEndpoint = 'https://api.groq.com/openai/v1/chat/completions';
-    this.groqVisionEndpoint = 'https://api.groq.com/openai/v1/vision/chat/completions';
+    this.groqVisionEndpoint = 'https://api.groq.com/openai/v1/chat/completions'; // Same endpoint for vision API
     
-    // Default LLM model selection - using smaller models to reduce token usage
-    this.defaultTextModel = 'llama3-8b-8192';  // Changed from llama3-70b-8192 to reduce token usage
-    this.defaultVisionModel = 'llama3-8b-8192-vision';
+    // Updated to use the correct supported models
+    this.defaultTextModel = 'llama3-8b-8192';
+    this.defaultVisionModel = 'meta-llama/llama-4-scout-17b-16e-instruct'; // Updated to supported vision model
     
     // Import system prompts from external file
     this.systemPrompts = prompts.systemPrompts;
@@ -51,6 +51,20 @@ class GroqService {
     if (this.debugMode && !fs.existsSync(this.debugDir)) {
       fs.mkdirSync(this.debugDir, { recursive: true });
     }
+    
+    // Token tracking for free tier management
+    this.tokenTracker = {
+      usedTokens: 0,
+      monthlyLimit: 10_000_000, // 10M tokens for free tier
+      trackUsage: function(response) {
+        if (response.usage) {
+          this.usedTokens += response.usage.total_tokens;
+          if (this.usedTokens > this.monthlyLimit * 0.9) {
+            console.warn(`⚠️ Token usage warning: ${this.usedTokens}/${this.monthlyLimit} (${(this.usedTokens/this.monthlyLimit*100).toFixed(1)}%)`);
+          }
+        }
+      }
+    };
   }
 
   /**
@@ -209,7 +223,10 @@ class GroqService {
       
       // Read the image file as base64
       const imageBuffer = fs.readFileSync(imagePath);
-      const base64Image = imageBuffer.toString('base64');
+      
+      // Optimize the image before sending
+      const optimizedImageBuffer = await this.optimizeImage(imageBuffer);
+      const base64Image = optimizedImageBuffer.toString('base64');
       
       // Use mime-types to detect content type dynamically
       const contentType = mime.lookup(imagePath) || 'image/jpeg';
@@ -219,7 +236,7 @@ class GroqService {
         console.log(`Processing image: ${path.basename(imagePath)}`);
         console.log(`Image hash: ${imageHash}`);
         console.log(`Content type: ${contentType}`);
-        console.log(`Image size: ${imageBuffer.length} bytes`);
+        console.log(`Image size: ${optimizedImageBuffer.length} bytes`);
         
         // Save debug info
         const debugInfo = {
@@ -227,7 +244,7 @@ class GroqService {
           imagePath,
           imageHash,
           contentType,
-          imageSize: imageBuffer.length,
+          imageSize: optimizedImageBuffer.length,
           prompt
         };
         
@@ -323,6 +340,46 @@ class GroqService {
     } catch (error) {
       console.error('Error generating image hash:', error);
       return `error-${Date.now()}`;
+    }
+  }
+  
+  /**
+   * Optimize image for Groq Vision API to stay within free tier limits
+   * @param {Buffer} imageBuffer - Image buffer
+   * @returns {Promise<Buffer>} - Optimized image buffer
+   */
+  async optimizeImage(imageBuffer) {
+    try {
+      // Import sharp dynamically to avoid bundling issues
+      const sharp = require('sharp');
+      
+      // Check if sharp is available
+      if (!sharp) {
+        console.warn('Sharp is not available for image optimization, using original image');
+        return imageBuffer;
+      }
+      
+      // Process image: resize to fit within 800x800 and compress as JPEG
+      const optimized = await sharp(imageBuffer)
+        .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 80, mozjpeg: true })
+        .toBuffer();
+        
+      console.log(`Image optimized: ${imageBuffer.length} → ${optimized.length} bytes (${Math.round(optimized.length / imageBuffer.length * 100)}% of original)`);
+      
+      // If the optimized image is still too large (>4MB for base64), compress more aggressively
+      if (optimized.length > 3 * 1024 * 1024) {
+        console.log('Image still too large, applying more aggressive compression');
+        return await sharp(imageBuffer)
+          .resize(600, 600, { fit: 'inside', withoutEnlargement: true })
+          .jpeg({ quality: 60, mozjpeg: true })
+          .toBuffer();
+      }
+      
+      return optimized;
+    } catch (error) {
+      console.error('Error optimizing image:', error);
+      return imageBuffer; // Return original image as fallback
     }
   }
   

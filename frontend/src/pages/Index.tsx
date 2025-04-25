@@ -219,9 +219,19 @@ const Index = () => {
     if (rawProducts.length === 0) return [];
     
     const formattedProducts = rawProducts.map((item: ApiProduct) => {
-      // Normalize price by removing currency symbols and commas
-      const normalizedPrice = item.price?.replace(/[₹$€£,]/g, '') || '0';
-      const normalizedOriginalPrice = item.originalPrice?.replace(/[₹$€£,]/g, '') || undefined;
+      // Normalize price by removing currency symbols and commas, handling both string and number types
+      const normalizedPrice = typeof item.price === 'string' 
+        ? item.price.replace(/[₹$€£,]/g, '') || '0'
+        : typeof item.price === 'number' 
+          ? String(item.price) 
+          : '0';
+          
+      // Also handle original price the same way
+      const normalizedOriginalPrice = typeof item.originalPrice === 'string'
+        ? item.originalPrice.replace(/[₹$€£,]/g, '') || undefined
+        : typeof item.originalPrice === 'number'
+          ? String(item.originalPrice)
+          : undefined;
       
       // Ensure we have a valid URL for the seller logo
       const vendorName = (item.vendor || item.retailer || 'unknown').toLowerCase().replace(/\s/g, '');

@@ -12,6 +12,7 @@ export interface ProductData {
   price: number | string;
   originalPrice?: number | string;
   discount?: string | number;
+  discountPercentage?: number; // New field for discount percentage
   seller?: string;
   vendor?: string; // Alternative field name
   retailer?: string; // Alternative field name
@@ -53,15 +54,28 @@ const DataCard: React.FC<DataCardProps> = ({ product, index, onSelect }) => {
   const productSellerLogo = product.sellerLogo || product.retailerLogo || 'https://via.placeholder.com/150x50?text=Retailer';
   const productLink = product.link || product.url || '#';
   
-  // Calculate discount if not provided
-  const discount = product.discount ? 
-    (typeof product.discount === 'number' ? 
-      product.discount : 
-      parseFloat(product.discount.toString().replace(/[^\d.]/g, '') || '0')
-    ) : 
-    (productOriginalPrice && productPrice ? 
-      ((productOriginalPrice - productPrice) / productOriginalPrice * 100).toFixed(0) : 
-      undefined);
+  // Calculate discount if not provided - with robust fix to prevent incorrect values
+  const discount = product.discountPercentage ? 
+    // If product has a discountPercentage property, use it directly
+    parseInt(String(product.discountPercentage), 10) 
+    : product.discount ? 
+      // If product has a discount property, normalize it
+      (typeof product.discount === 'number' ? 
+        parseInt(String(product.discount), 10) : 
+        parseInt(product.discount.toString().replace(/[^\d.]/g, ''), 10) || null
+      ) 
+    : (
+      // Calculate discount only if there is a meaningful difference between prices
+      productOriginalPrice && 
+      productPrice && 
+      productOriginalPrice > productPrice && 
+      // More stringent check - at least 5% difference and minimum Rs. 100 difference
+      ((productOriginalPrice - productPrice) / productOriginalPrice > 0.05) && 
+      (productOriginalPrice - productPrice >= 100) ? 
+        // Round to nearest integer to avoid precision issues
+        Math.round(((productOriginalPrice - productPrice) / productOriginalPrice) * 100) 
+        : null
+    );
   
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('en-IN', { 
