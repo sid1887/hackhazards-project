@@ -26,7 +26,7 @@ Our solution serves budget-conscious shoppers, enabling them to make informed pu
 `CODE RONIN`
 
 ### Team Members:  
-- Sid (GitHub: sid1887 / Role: Lead Developer)
+- Siddharth (GitHub: sid1887 / Role: Lead Developer)
 - [Add additional team members]
 
 ### Our Approach:  
@@ -89,9 +89,9 @@ Our solution serves budget-conscious shoppers, enabling them to make informed pu
 
 ## ✅ Tasks & Bonus Checklist
 
-- [ ] **All members of the team completed the mandatory task - Followed at least 2 of our social channels and filled the form** (Details in Participant Manual)  
-- [ ] **All members of the team completed Bonus Task 1 - Sharing of Badges and filled the form (2 points)**  (Details in Participant Manual)
-- [ ] **All members of the team completed Bonus Task 2 - Signing up for Sprint.dev and filled the form (3 points)**  (Details in Participant Manual)
+- [ ] **All members of the team completed the mandatory task - Followed at least 2 of our social channels and filled the form** (Details in Participant Manual)  ✅
+- [ ] **All members of the team completed Bonus Task 1 - Sharing of Badges and filled the form (2 points)**  (Details in Participant Manual)✅
+- [ ] **All members of the team completed Bonus Task 2 - Signing up for Sprint.dev and filled the form (3 points)**  (Details in Participant Manual)✅
 
 *(Mark with ✅ if completed)*
 
